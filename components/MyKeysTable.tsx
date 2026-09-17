@@ -16,10 +16,12 @@ interface MyKeysTableProps {
 export function MyKeysTable({ keys, onKeysUpdated, onRequestReissue }: MyKeysTableProps) {
   const [revokeTarget, setRevokeTarget] = useState<ApiKeyItem | null>(null);
   const [isRevoking, setIsRevoking] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
   const confirmRevoke = async () => {
     if (!revokeTarget) return;
     setIsRevoking(true);
+    setRevokeError(null);
 
     try {
       await deleteKey(revokeTarget.id);
@@ -27,9 +29,12 @@ export function MyKeysTable({ keys, onKeysUpdated, onRequestReissue }: MyKeysTab
         k.id === revokeTarget.id ? { ...k, status: "revoked" as const } : k
       );
       onKeysUpdated(updated);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("axiserp_keys_metadata", JSON.stringify(updated));
+      }
       setRevokeTarget(null);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setRevokeError(err?.message || "Failed to revoke key. It is still active.");
     } finally {
       setIsRevoking(false);
     }
@@ -142,6 +147,11 @@ export function MyKeysTable({ keys, onKeysUpdated, onRequestReissue }: MyKeysTab
             <p className="text-xs text-zinc-300 mb-5 leading-relaxed">
               This key will immediately stop working. Any MCP servers, terminal dashboards, or custom applications using this key will lose access immediately.
             </p>
+            {revokeError && (
+              <div className="p-2.5 mb-4 rounded bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+                {revokeError}
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <Button variant="secondary" size="sm" onClick={() => setRevokeTarget(null)} disabled={isRevoking}>
                 Cancel

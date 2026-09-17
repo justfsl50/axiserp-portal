@@ -22,13 +22,17 @@ export function ErpLinkModal({ isOpen, onClose, onKeyCreated, reissueTarget }: E
   const [erpId, setErpId] = useState("");
   const [erpPassword, setErpPassword] = useState("");
   const [name, setName] = useState("My Laptop");
+  const [isSignup, setIsSignup] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Pre-fill the key name when re-issuing an existing key
+  // Pre-fill the key name when re-issuing an existing key.
+  // Re-issue always uses login (additional key with same name).
   useEffect(() => {
     setName(reissueTarget ? reissueTarget.name : "My Laptop");
-  }, [reissueTarget]);
+    setIsSignup(!reissueTarget);
+    setError(null);
+  }, [reissueTarget, isOpen]);
 
   if (!isOpen) return null;
 
@@ -45,11 +49,17 @@ export function ErpLinkModal({ isOpen, onClose, onKeyCreated, reissueTarget }: E
     setError(null);
 
     try {
-      const response = await loginOrSignupErp({
-        erpId: erpId.trim(),
-        erpPassword: erpPassword.trim(),
-        name: name.trim() || "My Laptop",
-      });
+      // Signup = first key for a new account. Login = additional key for existing account.
+      // Re-issue always uses login.
+      const useSignup = reissueTarget ? false : isSignup;
+      const response = await loginOrSignupErp(
+        {
+          erpId: erpId.trim(),
+          erpPassword: erpPassword.trim(),
+          name: name.trim() || "My Laptop",
+        },
+        useSignup
+      );
 
       onKeyCreated(response.key, name.trim() || "My Laptop");
       onClose();
@@ -82,7 +92,26 @@ export function ErpLinkModal({ isOpen, onClose, onKeyCreated, reissueTarget }: E
         <form onSubmit={handleSubmit} className="space-y-4">
           {isReissue && (
             <div className="p-2.5 rounded bg-[#c9a0ff]/10 border border-[#c9a0ff]/20 text-xs text-[#c9a0ff]">
-              Re-issuing <strong>{reissueTarget!.name}</strong>. A new secret will be generated and shown once.
+              Re-issuing <strong>{reissueTarget!.name}</strong> via login. A new secret will be generated and shown once.
+            </div>
+          )}
+
+          {!isReissue && (
+            <div className="flex items-center gap-1 bg-white/[0.03] rounded-full p-1 border border-white/[0.06] w-fit text-xs">
+              <button
+                type="button"
+                onClick={() => setIsSignup(true)}
+                className={`px-3 py-1 rounded-full transition-all ${isSignup ? "bg-white text-zinc-900 font-semibold" : "text-zinc-500 hover:text-white"}`}
+              >
+                New account
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsSignup(false)}
+                className={`px-3 py-1 rounded-full transition-all ${!isSignup ? "bg-white text-zinc-900 font-semibold" : "text-zinc-500 hover:text-white"}`}
+              >
+                Existing
+              </button>
             </div>
           )}
 

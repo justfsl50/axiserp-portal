@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { Navbar } from "@/components/Navbar";
@@ -13,8 +13,6 @@ import { ApiKeyItem } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { Plus, User as UserIcon } from "lucide-react";
 
-const supabase = createClient();
-
 /** SHA-256 hash of the raw key — only this is persisted server-side. */
 async function hashKey(key: string): Promise<string> {
   const encoded = new TextEncoder().encode(key);
@@ -25,6 +23,7 @@ async function hashKey(key: string): Promise<string> {
 }
 
 export default function KeysPage() {
+  const supabase = useMemo(() => createClient(), []);
   const [keys, setKeys] = useState<ApiKeyItem[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [isErpModalOpen, setIsErpModalOpen] = useState(false);
@@ -37,12 +36,13 @@ export default function KeysPage() {
       if (typeof window !== "undefined") {
         const local = localStorage.getItem("axiserp_keys_metadata");
         if (local) {
-          try { setKeys(JSON.parse(local)); } catch {}
+          try {
+            setKeys(JSON.parse(local));
+          } catch {
+            setKeys([]);
+          }
         } else {
-          setKeys([
-            { id: "1", name: "mcp-claude", prefix: "axis_••••91", created_at: "Sep 13, 2026", status: "active", lastChars: "91" },
-            { id: "2", name: "cli-laptop", prefix: "axis_••••42", created_at: "Sep 10, 2026", status: "active", lastChars: "42" },
-          ]);
+          setKeys([]);
         }
       }
     };
@@ -82,7 +82,7 @@ export default function KeysPage() {
     });
 
     return () => { authListener?.subscription?.unsubscribe(); };
-  }, []);
+  }, [supabase]);
 
   const handleKeyCreated = async (key: string, name: string) => {
     setCreatedKeyData({ key, name });

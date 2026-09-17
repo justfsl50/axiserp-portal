@@ -14,10 +14,12 @@ export function DangerZone({ onAccountForgotten }: DangerZoneProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [confirmInput, setConfirmInput] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [forgetError, setForgetError] = useState<string | null>(null);
 
   const handleForget = async () => {
     if (confirmInput.trim() !== "FORGET") return;
     setIsDeleting(true);
+    setForgetError(null);
 
     try {
       await forgetAccount();
@@ -27,8 +29,8 @@ export function DangerZone({ onAccountForgotten }: DangerZoneProps) {
       }
       setIsOpen(false);
       onAccountForgotten();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setForgetError(err?.message || "Failed to forget account. Nothing was deleted.");
     } finally {
       setIsDeleting(false);
     }
@@ -72,6 +74,12 @@ export function DangerZone({ onAccountForgotten }: DangerZoneProps) {
             <p className="text-xs text-zinc-300 leading-relaxed mb-4">
               This will permanently purge your AXISERP session and invalidate all active API keys.
             </p>
+
+            {forgetError && (
+              <div className="p-2.5 mb-4 rounded bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+                {forgetError}
+              </div>
+            )}
 
             <div className="space-y-2 mb-5">
               <label className="block text-xs font-mono text-zinc-400">

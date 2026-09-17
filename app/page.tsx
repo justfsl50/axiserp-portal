@@ -37,7 +37,7 @@ export default function HomePage() {
             <img
               src={heroImageSrc}
               alt="Axis Colleges Campus — pixel art skyline"
-              className="w-fit h-50 object-cover object-center"
+              className="w-full h-full object-cover object-center"
               onError={() => setHeroImageSrc(HERO_IMAGE_FALLBACK)}
             />
             <div className="absolute inset-0 bg-gradient-to-b from-[#09090b]/80 via-[#09090b]/40 to-[#09090b]" />

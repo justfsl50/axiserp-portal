@@ -10,14 +10,19 @@ import { ApiKeyItem } from "@/lib/types";
 
 export default function ConnectPage() {
   const [keys, setKeys] = useState<ApiKeyItem[]>([]);
-  const [selectedKey, setSelectedKey] = useState<string>("ax_live_9f82e1c74d8120b4a7");
+  const [selectedKey, setSelectedKey] = useState<string>("axis_demo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchKeys().then(data => {
-      setKeys(data);
-      const active = data.find(k => k.status.toLowerCase() === "active");
-      if (active) setSelectedKey(`ax_live_••••${active.lastChars || "91"}`);
-    });
+    fetchKeys()
+      .then((data) => {
+        setKeys(data);
+        const active = data.find((k) => k.status.toLowerCase() === "active");
+        if (active) setSelectedKey(`axis_••••${active.lastChars || "––"}`);
+      })
+      .catch((err) => {
+        setLoadError(err?.message || "Failed to load keys");
+      });
   }, []);
 
   return (
@@ -41,17 +46,27 @@ export default function ConnectPage() {
 
           {/* Key selector */}
           <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <span className="text-zinc-500">Using key:</span>
+            <span className="text-zinc-500">
+              Using key:{" "}
+              {keys.length === 0 && (
+                <span className="text-zinc-600">(demo placeholder — create a key in My Keys)</span>
+              )}
+            </span>
+            {loadError && <span className="text-red-400">{loadError}</span>}
             <select
               value={selectedKey}
               onChange={(e) => setSelectedKey(e.target.value)}
               className="bg-[#09090b] border border-white/[0.08] text-zinc-300 text-xs font-mono px-3 py-1.5 rounded-lg outline-none focus:border-white/20"
             >
-              {keys.map((k) => (
-                <option key={k.id} value={`ax_live_••••${k.lastChars || "91"}`}>
-                  {k.name} ({k.prefix || `ax_••••${k.lastChars}`})
-                </option>
-              ))}
+              {keys.length === 0 ? (
+                <option value={selectedKey}>demo key ({selectedKey.slice(0, 12)}…)</option>
+              ) : (
+                keys.map((k) => (
+                  <option key={k.id} value={`axis_••••${k.lastChars || "––"}`}>
+                    {k.name} ({k.prefix || `axis_••••${k.lastChars}`})
+                  </option>
+                ))
+              )}
             </select>
           </div>
 

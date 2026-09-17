@@ -1,13 +1,16 @@
 import { createBrowserClient } from "@supabase/ssr";
 
-let client: ReturnType<typeof createBrowserClient> | null = null;
-
 export function createClient() {
-  if (client) return client;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY. Copy .env.example to .env.local."
+    );
+  }
 
-  client = createBrowserClient(supabaseUrl, supabaseAnonKey);
-  return client;
+  // Create a new client per call — safe for Client Components, avoids
+  // cross-user state leaking through a module-level singleton.
+  return createBrowserClient(supabaseUrl, supabaseAnonKey);
 }

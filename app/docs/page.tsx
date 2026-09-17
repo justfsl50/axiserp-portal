@@ -102,38 +102,59 @@ function CodeBlock({ code, lang = "bash", id }: { code: string; lang?: string; i
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Simple syntax highlighting
-  const highlight = (line: string) => {
+  // Safe highlighting without dangerouslySetInnerHTML.
+  // Static code strings only — render with plain spans by line type.
+  const renderLine = (line: string, key: number) => {
+    void id;
     // Comments
     if (line.trimStart().startsWith("#") || line.trimStart().startsWith("//")) {
-      return <span className="text-zinc-500 italic">{line}</span>;
-    }
-    // JSON keys
-    if (lang === "json") {
       return (
-        <span
-          dangerouslySetInnerHTML={{
-            __html: line
-              .replace(/"([^"]+)":/g, '<span class="text-sky-400">"$1"</span>:')
-              .replace(/: "([^"]+)"/g, ': <span class="text-emerald-400">"$1"</span>')
-              .replace(/: (true|false|null)/g, ': <span class="text-amber-400">$1</span>')
-          }}
-        />
+        <div key={key} className="text-zinc-500 italic">
+          {line || " "}
+        </div>
       );
     }
-    // Bash-style
+    if (lang === "json") {
+      // Highlight JSON keys vs string values with a simple split — no HTML injection.
+      const parts = line.split(/("[^"]*")/g);
+      return (
+        <div key={key}>
+          {parts.map((part, i) =>
+            part.startsWith('"') ? (
+              <span key={i} className={line.includes(":") && i === 1 ? "text-sky-400" : "text-emerald-400"}>
+                {part}
+              </span>
+            ) : (
+              <span key={i} className="text-zinc-300">
+                {part}
+              </span>
+            )
+          )}
+          {line === "" && " "}
+        </div>
+      );
+    }
+    // Bash / text: leading command in green, rest default. No regex-HTML.
+    const m = line.match(/^(\s*)(curl|npm|npx|axis)\b(.*)$/);
+    if (m) {
+      return (
+        <div key={key}>
+          <span className="text-zinc-300">{m[1]}</span>
+          <span className="text-emerald-400 font-bold">{m[2]}</span>
+          <span className="text-zinc-300">{m[3]}</span>
+        </div>
+      );
+    }
+    const color =
+      line.includes("→") || line.includes("[")
+        ? "text-zinc-200"
+        : line.startsWith(" ") || line.startsWith('"')
+          ? "text-zinc-300"
+          : "text-zinc-400";
     return (
-      <span
-        dangerouslySetInnerHTML={{
-          __html: line
-            .replace(/^(\s*)(curl|npm|npx|axis)\b/g, '$1<span class="text-emerald-400 font-bold">$2</span>')
-            .replace(/(-[a-zA-Z]+|--[a-zA-Z-]+)/g, '<span class="text-sky-400">$1</span>')
-            .replace(/"([^"]+)"/g, '<span class="text-amber-300">"$1"</span>')
-            .replace(/(https?:\/\/[^\s'"\\]+)/g, '<span class="text-violet-400 underline">$1</span>')
-            .replace(/→/g, '<span class="text-emerald-400">→</span>')
-            .replace(/(\[.\])/g, '<span class="text-sky-400 font-bold">$1</span>')
-        }}
-      />
+      <div key={key} className={color}>
+        {line || " "}
+      </div>
     );
   };
 
@@ -149,9 +170,7 @@ function CodeBlock({ code, lang = "bash", id }: { code: string; lang?: string; i
         </button>
       </div>
       <pre className="p-4 text-[12px] font-mono leading-relaxed overflow-x-auto">
-        {code.split("\n").map((line, i) => (
-          <div key={i}>{highlight(line)}</div>
-        ))}
+        {code.split("\n").map((line, i) => renderLine(line, i))}
       </pre>
     </div>
   );
