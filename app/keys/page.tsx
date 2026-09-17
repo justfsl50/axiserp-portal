@@ -33,6 +33,8 @@ export default function KeysPage() {
   const [isErpModalOpen, setIsErpModalOpen] = useState(false);
   const [createdKeyData, setCreatedKeyData] = useState<{ key: string; name: string } | null>(null);
   const [reissueKeyTarget, setReissueKeyTarget] = useState<ApiKeyItem | null>(null);
+  /** Which ERP tab the modal opens on — management reconnects land on Existing. */
+  const [modalMode, setModalMode] = useState<"signup" | "login">("signup");
   /** Live raw session key — memory only, never persisted. Enables real backend CRUD this tab session. */
   const [sessionKey, setSessionKey] = useState<string | null>(null);
   /** Raw secrets restored from key_secrets, keyed by key_hash. Memory only — never persisted. */
@@ -88,16 +90,21 @@ export default function KeysPage() {
     };
 
     const loadData = async () => {
-      // 1. Paint instantly from local cache — no network wait.
-      loadLocalKeys();
-      // 2. Fast session read first, then validate in background.
+      // 1. Auth first — signed-out users see NO keys, not even cached ones.
       const { data: { session } } = await supabase.auth.getSession();
       const sessionUser = session?.user ?? null;
       if (sessionUser) setUser(sessionUser);
       const { data: { user } } = await supabase.auth.getUser();
       const effectiveUser = user ?? sessionUser;
-      if (!effectiveUser) return;
+      if (!effectiveUser) {
+        setKeys([]);
+        setSessionKey(null);
+        setRowSecrets({});
+        return;
+      }
       if (user) setUser(user);
+      // 2. Paint instantly from local cache — no network wait (signed-in only).
+      loadLocalKeys();
       // Fetch key metadata from Supabase (capped — table can grow large)
       const { data: dbKeys } = await supabase
         .from("api_keys")
@@ -121,11 +128,19 @@ export default function KeysPage() {
         }
       }
       // 3. Restore a live session from stored secrets — CRUD works across reloads, no reconnect.
-      const { data: secrets } = await supabase
+      const { data: secrets, error: secretsError } = await supabase
         .from("key_secrets")
         .select("key_hash,raw_key,created_at")
         .order("created_at", { ascending: false })
         .limit(10);
+      if (secretsError) {
+        setSyncError(
+          secretsError.code === "42P01"
+            ? "Live-secret store unreachable (table missing). Run supabase/key_secrets.sql in your Supabase SQL editor, then reload."
+            : `Live-secret store unreachable: ${secretsError.message}. Check the key_secrets RLS policies.`
+        );
+        return;
+      }
       const usable = ((secrets ?? []) as KeySecretRow[]).filter(
         (s) => typeof s.raw_key === "string" && s.raw_key.length > 0
       );
@@ -155,7 +170,16 @@ export default function KeysPage() {
     }
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      const nextUser = session?.user ?? null;
+      setUser(nextUser);
+      if (!nextUser) {
+        // Signed out — wipe everything, including the cached rows (shared-machine privacy).
+        setKeys([]);
+        setSessionKey(null);
+        setRowSecrets({});
+        setSyncError(null);
+        if (typeof window !== "undefined") localStorage.removeItem("axiserp_keys_metadata");
+      }
     });
 
     return () => { authListener?.subscription?.unsubscribe(); };
@@ -246,18 +270,20 @@ export default function KeysPage() {
   };
 
   /** Gated open: signed in → modal; signed out → sign-in with return. */
-  const openKeyModal = async (target: ApiKeyItem | null) => {
+  const openKeyModal = async (target: ApiKeyItem | null, mode: "signup" | "login" = "signup") => {
     const dest = await keyGenGate(supabase, "/keys");
     if (dest) {
       router.push(dest);
       return;
     }
+    setModalMode(mode);
     setReissueKeyTarget(target);
     setIsErpModalOpen(true);
   };
 
   const openReconnect = () => {
-    openKeyModal(null);
+    // Management reconnect — open on the Existing tab, no accidental key minting.
+    openKeyModal(null, "login");
   };
 
   return (
@@ -296,39 +322,57 @@ export default function KeysPage() {
             {!user && <Link href="/signin" className="text-xs text-zinc-400 hover:text-white transition-colors">Sign In →</Link>}
           </div>
 
-          <MyKeysTable
-            keys={keys}
-            onKeysUpdated={persistKeys}
-            onRequestReissue={(t: ApiKeyItem) => openKeyModal(t)}
-            sessionKey={sessionKey}
-            rowSecrets={rowSecrets}
-            onNeedSessionKey={openReconnect}
-            onRevokeSucceeded={handleRevokeSucceeded}
-          />
-          {syncError && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.04] p-4 flex items-start gap-2 text-xs text-amber-300">
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {syncError}
-            </div>
-          )}
-          {keys.length > 0 && !sessionKey && (
-            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
-              <span className="text-zinc-500">
-                Viewing saved metadata. Link ERP <strong className="text-zinc-300">Existing</strong> to manage live server keys.
-              </span>
-              <button
-                onClick={openReconnect}
-                className="flex items-center gap-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-zinc-200 px-3 py-1.5 rounded-lg transition-colors"
+          {user ? (
+            <>
+              <MyKeysTable
+                keys={keys}
+                onKeysUpdated={persistKeys}
+                onRequestReissue={(t: ApiKeyItem) => openKeyModal(t)}
+                sessionKey={sessionKey}
+                rowSecrets={rowSecrets}
+                onNeedSessionKey={openReconnect}
+                onRevokeSucceeded={handleRevokeSucceeded}
+              />
+              {syncError && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.04] p-4 flex items-start gap-2 text-xs text-amber-300">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {syncError}
+                </div>
+              )}
+              {keys.length > 0 && !sessionKey && Object.keys(rowSecrets).length === 0 && (
+                <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <span className="text-zinc-500">
+                    These rows have no stored secret (created before secret storage). Connect once via{" "}
+                    <strong className="text-zinc-300">Existing</strong> to manage live server keys.
+                  </span>
+                  <button
+                    onClick={openReconnect}
+                    className="flex items-center gap-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-zinc-200 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Reconnect
+                  </button>
+                </div>
+              )}
+              <DangerZone
+                sessionKey={sessionKey}
+                rowSecrets={rowSecrets}
+                onNeedSessionKey={openReconnect}
+                onAccountForgotten={handleAccountForgotten}
+              />
+            </>
+          ) : (
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-10 text-center space-y-3">
+              <p className="text-zinc-300 text-sm font-medium">Sign in to view your API keys</p>
+              <p className="text-zinc-600 text-xs max-w-sm mx-auto">
+                Keys are private to your account. Sign in with Google, GitHub, or email to manage them.
+              </p>
+              <Link
+                href="/signin?next=%2Fkeys&link=1"
+                className="inline-block bg-white hover:bg-zinc-200 text-zinc-900 font-arial-bold text-xs px-5 py-2.5 rounded-lg transition-all"
               >
-                <RefreshCw className="w-3.5 h-3.5" /> Reconnect
-              </button>
+                Sign In →
+              </Link>
             </div>
           )}
-          <DangerZone
-            sessionKey={sessionKey}
-            rowSecrets={rowSecrets}
-            onNeedSessionKey={openReconnect}
-            onAccountForgotten={handleAccountForgotten}
-          />
         </div>
       </main>
 
@@ -336,9 +380,10 @@ export default function KeysPage() {
 
       <ErpLinkModal
         isOpen={isErpModalOpen}
-        onClose={() => { setIsErpModalOpen(false); setReissueKeyTarget(null); }}
+        onClose={() => { setIsErpModalOpen(false); setReissueKeyTarget(null); setModalMode("signup"); }}
         onKeyCreated={handleKeyCreated}
         reissueTarget={reissueKeyTarget}
+        defaultMode={modalMode}
       />
       {createdKeyData && <KeyCreatedModal apiKey={createdKeyData.key} keyName={createdKeyData.name} onClose={() => setCreatedKeyData(null)} />}
     </div>

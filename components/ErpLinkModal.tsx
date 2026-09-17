@@ -17,9 +17,11 @@ interface ErpLinkModalProps {
   onClose: () => void;
   onKeyCreated: (key: string, name: string) => void;
   reissueTarget?: ReissueTarget | null;
+  /** Which tab a fresh modal opens on — management reconnects use "login". */
+  defaultMode?: "signup" | "login";
 }
 
-export function ErpLinkModal({ isOpen, onClose, onKeyCreated, reissueTarget }: ErpLinkModalProps) {
+export function ErpLinkModal({ isOpen, onClose, onKeyCreated, reissueTarget, defaultMode = "signup" }: ErpLinkModalProps) {
   const supabase = useMemo(() => createClient(), []);
   const [erpId, setErpId] = useState("");
   const [erpPassword, setErpPassword] = useState("");
@@ -32,9 +34,9 @@ export function ErpLinkModal({ isOpen, onClose, onKeyCreated, reissueTarget }: E
   // Re-issue always uses login (additional key with same name).
   useEffect(() => {
     setName(reissueTarget ? reissueTarget.name : "My Laptop");
-    setIsSignup(!reissueTarget);
+    setIsSignup(reissueTarget ? false : defaultMode !== "login");
     setError(null);
-  }, [reissueTarget, isOpen]);
+  }, [reissueTarget, isOpen, defaultMode]);
 
   if (!isOpen) return null;
 
