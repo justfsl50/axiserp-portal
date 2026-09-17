@@ -10,8 +10,9 @@ import { DangerZone } from "@/components/DangerZone";
 import { ErpLinkModal } from "@/components/ErpLinkModal";
 import { KeyCreatedModal } from "@/components/KeyCreatedModal";
 import { ApiKeyItem } from "@/lib/types";
+import { listKeysFromBackend, normalizeBackendKey } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
-import { Plus, User as UserIcon } from "lucide-react";
+import { Plus, User as UserIcon, RefreshCw, AlertTriangle } from "lucide-react";
 
 /** SHA-256 hash of the raw key — only this is persisted server-side. */
 async function hashKey(key: string): Promise<string> {
@@ -29,6 +30,40 @@ export default function KeysPage() {
   const [isErpModalOpen, setIsErpModalOpen] = useState(false);
   const [createdKeyData, setCreatedKeyData] = useState<{ key: string; name: string } | null>(null);
   const [reissueKeyTarget, setReissueKeyTarget] = useState<ApiKeyItem | null>(null);
+  /** Live raw session key — memory only, never persisted. Enables real backend CRUD this tab session. */
+  const [sessionKey, setSessionKey] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const persistKeys = (rows: ApiKeyItem[]) => {
+    setKeys(rows);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("axiserp_keys_metadata", JSON.stringify(rows));
+    }
+  };
+
+  /** Merge local rows with backend truth: attach real backend IDs + statuses, add backend-only rows. */
+  const reconcileWithBackend = async (
+    rawKey: string,
+    base: ApiKeyItem[]
+  ): Promise<{ rows: ApiKeyItem[]; error: string | null }> => {
+    try {
+      const normalized = (await listKeysFromBackend(rawKey)).map(normalizeBackendKey);
+      const merged = base.map((row) => {
+        const match = normalized.find(
+          (b) =>
+            b.name.toLowerCase() === row.name.toLowerCase() &&
+            row.lastChars &&
+            b.lastChars === row.lastChars
+        );
+        return match ? { ...row, backendId: match.backendId, status: match.status } : row;
+      });
+      const known = new Set(merged.map((r) => r.backendId).filter(Boolean));
+      const backendOnly = normalized.filter((b) => !known.has(b.backendId));
+      return { rows: [...backendOnly, ...merged], error: null };
+    } catch (err: any) {
+      return { rows: base, error: err?.message || "Backend sync failed." };
+    }
+  };
 
   // Load user and keys from Supabase
   useEffect(() => {
@@ -93,29 +128,69 @@ export default function KeysPage() {
 
   const handleKeyCreated = async (key: string, name: string) => {
     setCreatedKeyData({ key, name });
+    setSessionKey(key); // memory only — never persisted. Enables real backend CRUD this tab session.
+    setSyncError(null);
+    const keyHash = await hashKey(key);
     const hex = key.slice(-2);
     const prefix = `axis_••••${hex}`;
+    const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
-    // Save only the hash to Supabase — never the raw secret
+    // 1. Persist metadata (hash only — never the raw secret). Surface failures loudly.
     if (user) {
-      const keyHash = await hashKey(key);
-      await supabase.from("api_keys").insert({
+      const { error } = await supabase.from("api_keys").insert({
         user_id: user.id,
         name,
         key_prefix: prefix,
         key_hash: keyHash,
         status: "active",
       });
+      if (error) {
+        setSyncError(`Saved locally, but Supabase rejected the row: ${error.message}. Check the api_keys RLS policies.`);
+      }
     }
 
-    const newKey: ApiKeyItem = {
-      id: `key_${Date.now()}`, name, prefix,
-      created_at: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      status: "active", lastChars: hex,
-    };
-    const updated = [newKey, ...keys];
-    setKeys(updated);
-    if (typeof window !== "undefined") localStorage.setItem("axiserp_keys_metadata", JSON.stringify(updated));
+    // 2. Reconcile with backend truth using the fresh raw key (real IDs + statuses).
+    const rows: ApiKeyItem[] = [
+      { id: `key_${Date.now()}`, name, prefix, created_at: today, status: "active", lastChars: hex, keyHash },
+      ...keys,
+    ];
+    const { rows: synced, error } = await reconcileWithBackend(key, rows);
+    if (error) {
+      setSyncError((prev) =>
+        prev
+          ? `${prev} Backend sync also failed: ${error}`
+          : `Saved, but backend sync failed: ${error}. The key itself is live — it will reconcile on next sync.`
+      );
+    }
+    persistKeys(synced);
+  };
+
+  /** After a successful backend revoke, mirror the status into our Supabase row (matched by hash). */
+  const handleRevokeSucceeded = async (row: ApiKeyItem) => {
+    if (user && row.keyHash) {
+      const { error } = await supabase
+        .from("api_keys")
+        .update({ status: "revoked" })
+        .eq("key_hash", row.keyHash);
+      if (error) {
+        setSyncError(`Backend revoked the key, but the Supabase status update failed: ${error.message}`);
+      }
+    }
+  };
+
+  const handleAccountForgotten = async () => {
+    // Best-effort Supabase cleanup — backend forget already succeeded at this point.
+    if (user) {
+      await supabase.from("api_keys").delete().eq("user_id", user.id);
+    }
+    persistKeys([]);
+    if (typeof window !== "undefined") localStorage.removeItem("axiserp_keys_metadata");
+    window.location.href = "/";
+  };
+
+  const openReconnect = () => {
+    setReissueKeyTarget(null);
+    setIsErpModalOpen(true);
   };
 
   return (
@@ -154,8 +229,37 @@ export default function KeysPage() {
             {!user && <Link href="/signin" className="text-xs text-zinc-400 hover:text-white transition-colors">Sign In →</Link>}
           </div>
 
-          <MyKeysTable keys={keys} onKeysUpdated={setKeys} onRequestReissue={(t: ApiKeyItem) => { setReissueKeyTarget(t); setIsErpModalOpen(true); }} />
-          <DangerZone onAccountForgotten={() => { setKeys([]); window.location.href = "/"; }} />
+          <MyKeysTable
+            keys={keys}
+            onKeysUpdated={persistKeys}
+            onRequestReissue={(t: ApiKeyItem) => { setReissueKeyTarget(t); setIsErpModalOpen(true); }}
+            sessionKey={sessionKey}
+            onNeedSessionKey={openReconnect}
+            onRevokeSucceeded={handleRevokeSucceeded}
+          />
+          {syncError && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.04] p-4 flex items-start gap-2 text-xs text-amber-300">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" /> {syncError}
+            </div>
+          )}
+          {keys.length > 0 && !sessionKey && (
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <span className="text-zinc-500">
+                Viewing saved metadata. Link ERP <strong className="text-zinc-300">Existing</strong> to manage live server keys.
+              </span>
+              <button
+                onClick={openReconnect}
+                className="flex items-center gap-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-zinc-200 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Reconnect
+              </button>
+            </div>
+          )}
+          <DangerZone
+            sessionKey={sessionKey}
+            onNeedSessionKey={openReconnect}
+            onAccountForgotten={handleAccountForgotten}
+          />
         </div>
       </main>
 

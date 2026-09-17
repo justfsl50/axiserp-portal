@@ -31,6 +31,7 @@ Raw secrets are never stored. Only `SHA-256(key_hash)` + `key_prefix` go to Supa
 - ERP password used once for verification, never saved.
 - Failures throw — no silent fake keys, no silent revoke success. See `lib/api.ts`.
 - Local `localStorage axiserp_keys_metadata` is a metadata cache only.
+- The fresh raw key lives in tab memory only and authorizes real backend list/revoke/forget; after reload the table shows saved metadata until you reconnect.
 
 ## Project structure
 

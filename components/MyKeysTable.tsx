@@ -11,27 +11,39 @@ interface MyKeysTableProps {
   keys: ApiKeyItem[];
   onKeysUpdated: (newKeys: ApiKeyItem[]) => void;
   onRequestReissue: (key: ApiKeyItem) => void;
+  /** Live raw session key (memory-only). Without it, backend revoke is impossible. */
+  sessionKey: string | null;
+  onNeedSessionKey: () => void;
+  onRevokeSucceeded?: (row: ApiKeyItem) => void;
 }
 
-export function MyKeysTable({ keys, onKeysUpdated, onRequestReissue }: MyKeysTableProps) {
+export function MyKeysTable({ keys, onKeysUpdated, onRequestReissue, sessionKey, onNeedSessionKey, onRevokeSucceeded }: MyKeysTableProps) {
   const [revokeTarget, setRevokeTarget] = useState<ApiKeyItem | null>(null);
   const [isRevoking, setIsRevoking] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
 
   const confirmRevoke = async () => {
     if (!revokeTarget) return;
+    if (!sessionKey) {
+      // No live secret → cannot touch the backend. Reconnect instead of fake-revoking.
+      setRevokeTarget(null);
+      onNeedSessionKey();
+      return;
+    }
     setIsRevoking(true);
     setRevokeError(null);
 
     try {
-      await deleteKey(revokeTarget.id);
-      const updated = keys.map(k => 
+      // Real backend revoke — uses the backend's key ID, never a local placeholder.
+      await deleteKey(revokeTarget.backendId ?? revokeTarget.id, sessionKey);
+      const updated = keys.map(k =>
         k.id === revokeTarget.id ? { ...k, status: "revoked" as const } : k
       );
       onKeysUpdated(updated);
       if (typeof window !== "undefined") {
         localStorage.setItem("axiserp_keys_metadata", JSON.stringify(updated));
       }
+      onRevokeSucceeded?.(revokeTarget);
       setRevokeTarget(null);
     } catch (err: any) {
       setRevokeError(err?.message || "Failed to revoke key. It is still active.");

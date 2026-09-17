@@ -56,8 +56,7 @@ export function loginOrSignupErp(payload: ErpAuthPayload, isSignup = false): Pro
 /**
  * 3. List keys - GET /api/keys (proxied) under X-API-Key
  */
-export async function fetchKeys(apiKey?: string): Promise<ApiKeyItem[]> {
-  if (apiKey) {
+export async function fetchKeys(apiKey?: string): Promise<ApiKeyItem[]> {  if (apiKey) {
     let res: Response;
     try {
       res = await fetch("/api/keys", {
@@ -87,6 +86,64 @@ export async function fetchKeys(apiKey?: string): Promise<ApiKeyItem[]> {
   }
 
   return [];
+}
+
+/**
+ * Backend truth: list raw key records from api.handlebid.lol (via proxy).
+ * Requires a live raw session key — call only when one is held in memory.
+ * Accepts both `[...]` and `{ keys: [...] }` response shapes.
+ */
+export async function listKeysFromBackend(apiKey: string): Promise<any[]> {
+  let res: Response;
+  try {
+    res = await fetch("/api/keys", {
+      headers: { "X-API-Key": apiKey },
+    });
+  } catch {
+    throw new Error("Cannot reach API server to list keys. Check your connection.");
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.message ?? `Failed to list keys (HTTP ${res.status})`);
+  }
+  const data = await res.json();
+  if (Array.isArray(data)) return data;
+  if (data.keys && Array.isArray(data.keys)) return data.keys;
+  return [];
+}
+
+function formatBackendDate(value: any): string {
+  try {
+    if (!value) throw new Error("empty");
+    return new Date(value).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return new Date().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+}
+
+/** Normalize one backend record into an ApiKeyItem carrying its real backend ID. */
+export function normalizeBackendKey(record: any): ApiKeyItem {
+  const rawPrefix: string =
+    record.prefix ?? record.key_prefix ?? (record.lastChars ? `axis_••••${record.lastChars}` : "axis_••••––");
+  const tail = (rawPrefix.replace(/[^a-zA-Z0-9]/g, "").slice(-2) || "––").slice(-2);
+  const rawStatus = String(record.status ?? "active").toLowerCase();
+  return {
+    id: `backend_${record.id}`,
+    name: record.name ?? "unnamed",
+    prefix: rawPrefix,
+    created_at: formatBackendDate(record.created_at ?? record.createdAt),
+    status: rawStatus === "revoked" ? "revoked" : "active",
+    lastChars: tail,
+    backendId: String(record.id),
+  };
 }
 
 /**

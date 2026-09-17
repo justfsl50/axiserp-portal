@@ -7,10 +7,13 @@ import { forgetAccount } from "@/lib/api";
 import { AlertTriangle, Trash2, X } from "lucide-react";
 
 interface DangerZoneProps {
-  onAccountForgotten: () => void;
+  onAccountForgotten: () => void | Promise<void>;
+  /** Live raw session key (memory-only). Without it, backend forget is impossible. */
+  sessionKey: string | null;
+  onNeedSessionKey: () => void;
 }
 
-export function DangerZone({ onAccountForgotten }: DangerZoneProps) {
+export function DangerZone({ onAccountForgotten, sessionKey, onNeedSessionKey }: DangerZoneProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [confirmInput, setConfirmInput] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
@@ -18,17 +21,25 @@ export function DangerZone({ onAccountForgotten }: DangerZoneProps) {
 
   const handleForget = async () => {
     if (confirmInput.trim() !== "FORGET") return;
+    if (!sessionKey) {
+      // No live secret → cannot touch the backend. Reconnect instead of fake-forgetting.
+      setIsOpen(false);
+      setConfirmInput("");
+      onNeedSessionKey();
+      return;
+    }
     setIsDeleting(true);
     setForgetError(null);
 
     try {
-      await forgetAccount();
+      // Real backend forget — invalidates every live key server-side.
+      await forgetAccount(sessionKey);
       if (typeof window !== "undefined") {
         localStorage.removeItem("axiserp_keys_metadata");
         localStorage.removeItem("axiserp_supabase_user");
       }
       setIsOpen(false);
-      onAccountForgotten();
+      await onAccountForgotten();
     } catch (err: any) {
       setForgetError(err?.message || "Failed to forget account. Nothing was deleted.");
     } finally {

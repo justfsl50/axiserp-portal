@@ -19,6 +19,10 @@ export interface ApiKeyItem {
   created_at: string;
   status: "active" | "revoked" | "ACTIVE" | "REVOKED";
   lastChars?: string;
+  /** Real backend key ID from api.handlebid.lol — present only after a backend sync. */
+  backendId?: string;
+  /** SHA-256 of the raw secret — lets us update our own Supabase row without the secret. */
+  keyHash?: string;
 }
 
 export interface StudentAttendance {
