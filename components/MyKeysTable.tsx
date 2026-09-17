@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ApiKeyItem } from "@/lib/types";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { deleteKey } from "@/lib/api";
+import { resolveBackendId, revokeAndVerify } from "@/lib/api";
 import { Key, RotateCw, Trash2, AlertTriangle, ShieldCheck } from "lucide-react";
 
 interface MyKeysTableProps {
@@ -41,8 +41,12 @@ export function MyKeysTable({ keys, onKeysUpdated, onRequestReissue, sessionKey,
     setRevokeError(null);
 
     try {
-      // Real backend revoke — uses the backend's key ID, never a local placeholder.
-      await deleteKey(revokeTarget.backendId ?? revokeTarget.id, rowSecret);
+      // Real backend revoke — path ID selects the target, header only authenticates.
+      const resolved = resolveBackendId(revokeTarget);
+      if (!resolved.id) throw new Error(resolved.reason ?? "Row has no backend ID.");
+      const ownSecret = revokeTarget.keyHash ? rowSecrets[revokeTarget.keyHash] : undefined;
+      const selfAuth = Boolean(ownSecret && ownSecret === rowSecret);
+      await revokeAndVerify(resolved.id, rowSecret, selfAuth);
       const updated = keys.map(k =>
         k.id === revokeTarget.id ? { ...k, status: "revoked" as const } : k
       );

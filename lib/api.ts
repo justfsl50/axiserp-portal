@@ -113,37 +113,79 @@ export async function listKeysFromBackend(apiKey: string): Promise<any[]> {
 }
 
 function formatBackendDate(value: any): string {
+  // Backend sends epoch SECONDS (float). Date() needs ms — heuristic scale-up.
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   try {
-    if (!value) throw new Error("empty");
-    return new Date(value).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+    if (value === null || value === undefined || value === "") throw new Error("empty");
+    const num = typeof value === "number" ? value : Date.parse(value);
+    if (Number.isNaN(num)) throw new Error("unparseable");
+    const ms = num < 1e12 ? num * 1000 : num;
+    return fmt(new Date(ms));
   } catch {
-    return new Date().toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+    return fmt(new Date());
   }
 }
 
-/** Normalize one backend record into an ApiKeyItem carrying its real backend ID. */
+/**
+ * Normalize one backend record. Backend truth (vault.list_keys):
+ * { id, name, scopes, created_at (epoch s), last_used_at, revoked: bool, key_preview: null }
+ * — there is NO status string and NO key preview, so we map honestly instead of fabricating.
+ */
 export function normalizeBackendKey(record: any): ApiKeyItem {
-  const rawPrefix: string =
-    record.prefix ?? record.key_prefix ?? (record.lastChars ? `axis_••••${record.lastChars}` : "axis_••••––");
-  const tail = (rawPrefix.replace(/[^a-zA-Z0-9]/g, "").slice(-2) || "––").slice(-2);
-  const rawStatus = String(record.status ?? "active").toLowerCase();
+  const isRevoked = record.revoked === true;
   return {
     id: `backend_${record.id}`,
     name: record.name ?? "unnamed",
-    prefix: rawPrefix,
+    prefix: `backend #${record.id}`,
     created_at: formatBackendDate(record.created_at ?? record.createdAt),
-    status: rawStatus === "revoked" ? "revoked" : "active",
-    lastChars: tail,
+    status: isRevoked ? "revoked" : "active",
+    lastChars: undefined,
     backendId: String(record.id),
   };
+}
+
+/**
+ * Resolve a table row to a REAL backend key ID. Never invent one:
+ * local/Supabase placeholder IDs (key_*, uuids) must not be sent as {kid}.
+ * Returns null with a human reason when unresolvable.
+ */
+export function resolveBackendId(row: ApiKeyItem): { id: string | null; reason: string | null } {
+  if (row.backendId && /^\d+$/.test(row.backendId)) return { id: row.backendId, reason: null };
+  const m = /^backend_(\d+)$/.exec(row.id);
+  if (m) return { id: m[1], reason: null };
+  return {
+    id: null,
+    reason: `"${row.name}" has no backend ID yet — sync with a live key first (it will attach automatically).`,
+  };
+}
+
+/**
+ * Revoke + mandatory verification: 2xx alone never proves death.
+ * Re-lists and asserts the target is gone/revoked before resolving.
+ * selfAuth=true (actor is the target itself): a post-delete 401 IS the proof.
+ */
+export async function revokeAndVerify(
+  backendId: string,
+  secret: string,
+  selfAuth: boolean
+): Promise<void> {
+  await deleteKey(backendId, secret);
+  let rows: ApiKeyItem[];
+  try {
+    rows = (await listKeysFromBackend(secret)).map(normalizeBackendKey);
+  } catch (err: any) {
+    if (selfAuth && /401/.test(err?.message ?? "")) return; // actor dead → target (itself) dead. Verified.
+    throw new Error(
+      `Revoke sent, but verification failed: ${err?.message || "unknown error"}. Target state unknown — re-sync before trusting the table.`
+    );
+  }
+  const found = rows.find((r) => r.backendId === backendId);
+  if (found && found.status !== "revoked") {
+    throw new Error(
+      `Backend still reports "${found.name}" as ACTIVE after revoke. Nothing was revoked — target state kept.`
+    );
+  }
 }
 
 /**

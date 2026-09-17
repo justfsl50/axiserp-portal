@@ -11,7 +11,7 @@ import { DangerZone } from "@/components/DangerZone";
 import { ErpLinkModal } from "@/components/ErpLinkModal";
 import { KeyCreatedModal } from "@/components/KeyCreatedModal";
 import { ApiKeyItem, KeySecretRow } from "@/lib/types";
-import { listKeysFromBackend, normalizeBackendKey, deleteKey } from "@/lib/api";
+import { listKeysFromBackend, normalizeBackendKey, resolveBackendId, revokeAndVerify } from "@/lib/api";
 import { keyGenGate } from "@/lib/keyGate";
 import { createClient } from "@/lib/supabase/client";
 import { Plus, User as UserIcon, RefreshCw, AlertTriangle } from "lucide-react";
@@ -50,21 +50,26 @@ export default function KeysPage() {
     }
   };
 
-  /** Merge local rows with backend truth: attach real backend IDs + statuses, add backend-only rows. */
+  /** Merge local rows with backend truth: attach real backend IDs + statuses, add backend-only rows.
+   *  Backend rows carry no key preview, so local rows link by name (first unmatched wins);
+   *  leftovers are appended as backend #id rows. */
   const reconcileWithBackend = async (
     rawKey: string,
     base: ApiKeyItem[]
   ): Promise<{ rows: ApiKeyItem[]; error: string | null }> => {
     try {
       const normalized = (await listKeysFromBackend(rawKey)).map(normalizeBackendKey);
+      const taken = new Set<string>();
       const merged = base.map((row) => {
+        if (row.backendId) return row;
         const match = normalized.find(
-          (b) =>
-            b.name.toLowerCase() === row.name.toLowerCase() &&
-            row.lastChars &&
-            b.lastChars === row.lastChars
+          (b) => !taken.has(b.backendId as string) && b.name.toLowerCase() === row.name.toLowerCase()
         );
-        return match ? { ...row, backendId: match.backendId, status: match.status } : row;
+        if (match) {
+          taken.add(match.backendId as string);
+          return { ...row, backendId: match.backendId, status: match.status, created_at: match.created_at, prefix: `backend #${match.backendId}` };
+        }
+        return row;
       });
       const known = new Set(merged.map((r) => r.backendId).filter(Boolean));
       const backendOnly = normalized.filter((b) => !known.has(b.backendId));
@@ -129,7 +134,8 @@ export default function KeysPage() {
           localStorage.setItem("axiserp_keys_metadata", JSON.stringify(rows));
         }
       }
-      // 3. Restore a live session from stored secrets — CRUD works across reloads, no reconnect.
+      // 3. Secret janitor: probe stored secrets newest-first. First live one
+      // becomes the session; 401 corpses are pruned (deleted), never retried forever.
       const { data: secrets, error: secretsError } = await supabase
         .from("key_secrets")
         .select("key_hash,raw_key,created_at")
@@ -146,19 +152,45 @@ export default function KeysPage() {
       const usable = ((secrets ?? []) as KeySecretRow[]).filter(
         (s) => typeof s.raw_key === "string" && s.raw_key.length > 0
       );
-      if (usable.length > 0) {
-        const byHash: Record<string, string> = {};
-        usable.forEach((s) => { byHash[s.key_hash] = s.raw_key; });
-        setRowSecrets(byHash);
-        const live = usable[0].raw_key;
-        setSessionKey(live);
-        // Reconcile with backend truth now that we hold a live secret.
-        const { rows: synced, error } = await reconcileWithBackend(live, rows.length > 0 ? rows : keys);
-        if (error) {
-          setSyncError(`Backend sync failed: ${error}`);
-        } else {
-          persistKeys(synced);
+      const liveSecrets: Record<string, string> = {};
+      let live: string | null = null;
+      for (const s of usable) {
+        if (live) {
+          liveSecrets[s.key_hash] = s.raw_key; // older, unprobed — kept optimistically
+          continue;
         }
+        try {
+          await listKeysFromBackend(s.raw_key); // liveness probe
+          live = s.raw_key;
+          liveSecrets[s.key_hash] = s.raw_key;
+        } catch (err: any) {
+          if (/401/.test(err?.message ?? "")) {
+            // Corpse: revoked server-side. Prune it so it never 401s again.
+            await supabase.from("key_secrets").delete().eq("key_hash", s.key_hash);
+          } else {
+            setSyncError(`Backend sync failed: ${err?.message || "unknown error"}`);
+            setRowSecrets(liveSecrets);
+            return;
+          }
+        }
+      }
+      if (!live) {
+        setRowSecrets(liveSecrets);
+        if (usable.length > 0) {
+          setSyncError(
+            "No live secrets remain — stored ones were revoked server-side and pruned. Connect once via Existing to restore management."
+          );
+        }
+        return;
+      }
+      setRowSecrets(liveSecrets);
+      setSessionKey(live);
+      // Reconcile with backend truth now that we hold a live secret.
+      const { rows: synced, error } = await reconcileWithBackend(live, rows.length > 0 ? rows : keys);
+      if (error) {
+        setSyncError(`Backend sync failed: ${error}`);
+      } else {
+        persistKeys(synced);
       }
     };
 
@@ -242,16 +274,24 @@ export default function KeysPage() {
     const pending = pendingRevokeRef.current;
     pendingRevokeRef.current = null;
     if (pending) {
-      try {
-        await deleteKey(pending.backendId ?? pending.id, key);
-        finalRows = synced.map((r) =>
-          r.id === pending.id ? { ...r, status: "revoked" as const } : r
-        );
-        await handleRevokeSucceeded(pending);
-      } catch (err: any) {
+      const resolved = resolveBackendId(pending);
+      if (!resolved.id) {
         setSyncError(
-          `Reconnected, but revoking "${pending.name}" failed: ${err?.message || "unknown error"}. It is still active — try Revoke again.`
+          `Reconnected, but "${pending.name}" could not be addressed: ${resolved.reason}`
         );
+      } else {
+        try {
+          // Fresh key authenticates; path ID selects the old target. Verified below.
+          await revokeAndVerify(resolved.id, key, false);
+          finalRows = synced.map((r) =>
+            r.id === pending.id ? { ...r, status: "revoked" as const } : r
+          );
+          await handleRevokeSucceeded(pending);
+        } catch (err: any) {
+          setSyncError(
+            `Reconnected, but revoking "${pending.name}" failed: ${err?.message || "unknown error"}. It is still active — try Revoke again.`
+          );
+        }
       }
     }
     persistKeys(finalRows);
