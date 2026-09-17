@@ -28,10 +28,11 @@ Raw secrets are never stored. Only `SHA-256(key_hash)` + `key_prefix` go to Supa
 
 ## Security model
 
+- Key generation requires a signed-in user (Google / GitHub / email). Guests cannot mint backend keys.
 - ERP password used once for verification, never saved.
 - Failures throw — no silent fake keys, no silent revoke success. See `lib/api.ts`.
 - Local `localStorage axiserp_keys_metadata` is a metadata cache only.
-- The fresh raw key lives in tab memory only and authorizes real backend list/revoke/forget; after reload the table shows saved metadata until you reconnect.
+- Live raw secrets are stored in Supabase `key_secrets` (run `supabase/key_secrets.sql`) so backend CRUD survives reloads. This is plaintext-at-rest behind owner-only RLS — accepted tradeoff, documented here: project members, dashboard viewers, backups, or a leaked `service_role` key can read live secrets. Mitigate with minimal collaborators + 2FA + never shipping `service_role` client-side. Revoked secrets are deleted immediately.
 
 ## Project structure
 

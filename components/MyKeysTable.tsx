@@ -13,18 +13,23 @@ interface MyKeysTableProps {
   onRequestReissue: (key: ApiKeyItem) => void;
   /** Live raw session key (memory-only). Without it, backend revoke is impossible. */
   sessionKey: string | null;
+  /** Stored raw secrets by key_hash (memory-only). Enables self-auth revoke per row. */
+  rowSecrets: Record<string, string>;
   onNeedSessionKey: () => void;
   onRevokeSucceeded?: (row: ApiKeyItem) => void;
 }
 
-export function MyKeysTable({ keys, onKeysUpdated, onRequestReissue, sessionKey, onNeedSessionKey, onRevokeSucceeded }: MyKeysTableProps) {
+export function MyKeysTable({ keys, onKeysUpdated, onRequestReissue, sessionKey, rowSecrets, onNeedSessionKey, onRevokeSucceeded }: MyKeysTableProps) {
   const [revokeTarget, setRevokeTarget] = useState<ApiKeyItem | null>(null);
   const [isRevoking, setIsRevoking] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
 
   const confirmRevoke = async () => {
     if (!revokeTarget) return;
-    if (!sessionKey) {
+    // Prefer the row's own stored secret (self-auth); fall back to the session key.
+    const rowSecret =
+      (revokeTarget.keyHash && rowSecrets[revokeTarget.keyHash]) || sessionKey;
+    if (!rowSecret) {
       // No live secret → cannot touch the backend. Reconnect instead of fake-revoking.
       setRevokeTarget(null);
       onNeedSessionKey();
@@ -35,7 +40,7 @@ export function MyKeysTable({ keys, onKeysUpdated, onRequestReissue, sessionKey,
 
     try {
       // Real backend revoke — uses the backend's key ID, never a local placeholder.
-      await deleteKey(revokeTarget.backendId ?? revokeTarget.id, sessionKey);
+      await deleteKey(revokeTarget.backendId ?? revokeTarget.id, rowSecret);
       const updated = keys.map(k =>
         k.id === revokeTarget.id ? { ...k, status: "revoked" as const } : k
       );

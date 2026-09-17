@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { loginOrSignupErp } from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 import { Lock, RotateCw, ShieldCheck, X } from "lucide-react";
 
 interface ReissueTarget {
@@ -19,6 +20,7 @@ interface ErpLinkModalProps {
 }
 
 export function ErpLinkModal({ isOpen, onClose, onKeyCreated, reissueTarget }: ErpLinkModalProps) {
+  const supabase = useMemo(() => createClient(), []);
   const [erpId, setErpId] = useState("");
   const [erpPassword, setErpPassword] = useState("");
   const [name, setName] = useState("My Laptop");
@@ -42,6 +44,12 @@ export function ErpLinkModal({ isOpen, onClose, onKeyCreated, reissueTarget }: E
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Key generation requires a signed-in user (Google / GitHub / email).
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      setError("Please sign in first, then generate a key.");
+      return;
+    }
     const id = erpId.trim().toLowerCase();
     if (!id || !erpPassword.trim()) {
       setError("Please enter your ERP ID and password.");

@@ -10,10 +10,12 @@ interface DangerZoneProps {
   onAccountForgotten: () => void | Promise<void>;
   /** Live raw session key (memory-only). Without it, backend forget is impossible. */
   sessionKey: string | null;
+  /** Stored raw secrets by key_hash (memory-only). Any one authorizes forget. */
+  rowSecrets: Record<string, string>;
   onNeedSessionKey: () => void;
 }
 
-export function DangerZone({ onAccountForgotten, sessionKey, onNeedSessionKey }: DangerZoneProps) {
+export function DangerZone({ onAccountForgotten, sessionKey, rowSecrets, onNeedSessionKey }: DangerZoneProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [confirmInput, setConfirmInput] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
@@ -21,7 +23,9 @@ export function DangerZone({ onAccountForgotten, sessionKey, onNeedSessionKey }:
 
   const handleForget = async () => {
     if (confirmInput.trim() !== "FORGET") return;
-    if (!sessionKey) {
+    // Any stored live secret authorizes the backend forget (session key preferred).
+    const liveSecret = sessionKey ?? Object.values(rowSecrets)[0] ?? null;
+    if (!liveSecret) {
       // No live secret → cannot touch the backend. Reconnect instead of fake-forgetting.
       setIsOpen(false);
       setConfirmInput("");
@@ -33,7 +37,7 @@ export function DangerZone({ onAccountForgotten, sessionKey, onNeedSessionKey }:
 
     try {
       // Real backend forget — invalidates every live key server-side.
-      await forgetAccount(sessionKey);
+      await forgetAccount(liveSecret);
       if (typeof window !== "undefined") {
         localStorage.removeItem("axiserp_keys_metadata");
         localStorage.removeItem("axiserp_supabase_user");

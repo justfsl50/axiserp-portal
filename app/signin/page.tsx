@@ -18,9 +18,19 @@ export default function SignInPage() {
   const [successMsg, setSuccessMsg] = useState("");
   const supabase = useMemo(() => createClient(), []);
 
+  /** Where to land after auth: honors ?next= (open-redirect hardened) + ?link=1. */
+  const getReturnTarget = (): string => {
+    if (typeof window === "undefined") return "/keys";
+    const params = new URLSearchParams(window.location.search);
+    const rawNext = params.get("next");
+    const next =
+      rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/keys";
+    return params.get("link") ? `${next}${next.includes("?") ? "&" : "?"}link=1` : next;
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }: any) => {
-      if (data?.session?.user) router.push("/keys");
+      if (data?.session?.user) router.push(getReturnTarget());
     });
   }, [router, supabase]);
 
@@ -28,7 +38,8 @@ export default function SignInPage() {
     try {
       setIsLoading(true);
       setErrorMsg("");
-      const redirectUrl = typeof window !== "undefined" ? `${window.location.origin}/keys` : undefined;
+      const redirectUrl =
+        typeof window !== "undefined" ? `${window.location.origin}${getReturnTarget()}` : undefined;
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: { redirectTo: redirectUrl },
@@ -50,7 +61,7 @@ export default function SignInPage() {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}/keys` : undefined,
+          emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}${getReturnTarget()}` : undefined,
         },
       });
       if (error) throw error;
@@ -75,7 +86,7 @@ export default function SignInPage() {
         type: "email",
       });
       if (error) throw error;
-      router.push("/keys");
+      router.push(getReturnTarget());
     } catch (err: any) {
       setErrorMsg(err.message || "Invalid or expired code");
     } finally {

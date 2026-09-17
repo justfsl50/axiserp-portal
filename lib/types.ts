@@ -25,6 +25,14 @@ export interface ApiKeyItem {
   keyHash?: string;
 }
 
+/** One stored live secret. Raw secret at rest — owner-RLS only. See migration. */
+export interface KeySecretRow {
+  key_hash: string;
+  raw_key: string;
+  user_id: string;
+  created_at?: string;
+}
+
 export interface StudentAttendance {
   present: number;
   absent: number;

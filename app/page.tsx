@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Navbar } from "@/components/Navbar";
 import { HeroTerminal } from "@/components/HeroTerminal";
@@ -11,11 +12,15 @@ import { KeyCreatedModal } from "@/components/KeyCreatedModal";
 import { FaqSection } from "@/components/FaqSection";
 import { Footer } from "@/components/Footer";
 import { ArrowRight } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { keyGenGate } from "@/lib/keyGate";
 
 const HERO_IMAGE = "/axis-pixel-skyline.png";
 const HERO_IMAGE_FALLBACK = "/axis-campus-night.png";
 
 export default function HomePage() {
+  const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
   const [isErpModalOpen, setIsErpModalOpen] = useState(false);
   const [activeKey, setActiveKey] = useState<string>("axis_demo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
   const [createdKeyData, setCreatedKeyData] = useState<{ key: string; name: string } | null>(null);
@@ -26,9 +31,19 @@ export default function HomePage() {
     setCreatedKeyData({ key, name });
   };
 
+  /** Gated open: signed in (Google / GitHub / email) → modal; else sign-in first. */
+  const openKeyModal = async () => {
+    const dest = await keyGenGate(supabase, "/");
+    if (dest) {
+      router.push(dest);
+      return;
+    }
+    setIsErpModalOpen(true);
+  };
+
   return (
     <div className="min-h-screen flex flex-col font-arial">
-      <Navbar onOpenErpModal={() => setIsErpModalOpen(true)} />
+      <Navbar onOpenErpModal={openKeyModal} />
 
       <main className="flex-1">
         {/* ─── HERO ─── */}
@@ -65,7 +80,7 @@ export default function HomePage() {
 
             <div className="flex flex-wrap items-center justify-center gap-3">
               <button
-                onClick={() => setIsErpModalOpen(true)}
+                onClick={openKeyModal}
                 className="bg-white hover:bg-zinc-200 text-zinc-900 font-arial-bold text-sm px-7 py-3 rounded-full transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2"
               >
                 <span>Get Started</span>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
@@ -9,8 +10,9 @@ import { MyKeysTable } from "@/components/MyKeysTable";
 import { DangerZone } from "@/components/DangerZone";
 import { ErpLinkModal } from "@/components/ErpLinkModal";
 import { KeyCreatedModal } from "@/components/KeyCreatedModal";
-import { ApiKeyItem } from "@/lib/types";
+import { ApiKeyItem, KeySecretRow } from "@/lib/types";
 import { listKeysFromBackend, normalizeBackendKey } from "@/lib/api";
+import { keyGenGate } from "@/lib/keyGate";
 import { createClient } from "@/lib/supabase/client";
 import { Plus, User as UserIcon, RefreshCw, AlertTriangle } from "lucide-react";
 
@@ -25,6 +27,7 @@ async function hashKey(key: string): Promise<string> {
 
 export default function KeysPage() {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
   const [keys, setKeys] = useState<ApiKeyItem[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [isErpModalOpen, setIsErpModalOpen] = useState(false);
@@ -32,6 +35,8 @@ export default function KeysPage() {
   const [reissueKeyTarget, setReissueKeyTarget] = useState<ApiKeyItem | null>(null);
   /** Live raw session key — memory only, never persisted. Enables real backend CRUD this tab session. */
   const [sessionKey, setSessionKey] = useState<string | null>(null);
+  /** Raw secrets restored from key_secrets, keyed by key_hash. Memory only — never persisted. */
+  const [rowSecrets, setRowSecrets] = useState<Record<string, string>>({});
   const [syncError, setSyncError] = useState<string | null>(null);
 
   const persistKeys = (rows: ApiKeyItem[]) => {
@@ -91,33 +96,63 @@ export default function KeysPage() {
       if (sessionUser) setUser(sessionUser);
       const { data: { user } } = await supabase.auth.getUser();
       const effectiveUser = user ?? sessionUser;
-      if (effectiveUser) {
-        if (user) setUser(user);
-        // Fetch keys from Supabase (capped — table can grow large)
-        const { data: dbKeys } = await supabase
-          .from("api_keys")
-          .select("id,name,key_prefix,created_at,status")
-          .order("created_at", { ascending: false })
-          .limit(50);
+      if (!effectiveUser) return;
+      if (user) setUser(user);
+      // Fetch key metadata from Supabase (capped — table can grow large)
+      const { data: dbKeys } = await supabase
+        .from("api_keys")
+        .select("id,name,key_prefix,key_hash,created_at,status")
+        .order("created_at", { ascending: false })
+        .limit(50);
 
-        if (dbKeys && dbKeys.length > 0) {
-          const mapped = dbKeys.map((k: any) => ({
-            id: k.id.toString(),
-            name: k.name,
-            prefix: k.key_prefix,
-            created_at: new Date(k.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-            status: k.status,
-            lastChars: k.key_prefix.slice(-2),
-          }));
-          setKeys(mapped);
-          if (typeof window !== "undefined") {
-            localStorage.setItem("axiserp_keys_metadata", JSON.stringify(mapped));
-          }
+      let rows: ApiKeyItem[] = (dbKeys ?? []).map((k: any) => ({
+        id: k.id.toString(),
+        name: k.name,
+        prefix: k.key_prefix,
+        created_at: new Date(k.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        status: k.status,
+        lastChars: k.key_prefix.slice(-2),
+        keyHash: k.key_hash,
+      }));
+      if (rows.length > 0) {
+        setKeys(rows);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("axiserp_keys_metadata", JSON.stringify(rows));
+        }
+      }
+      // 3. Restore a live session from stored secrets — CRUD works across reloads, no reconnect.
+      const { data: secrets } = await supabase
+        .from("key_secrets")
+        .select("key_hash,raw_key,created_at")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      const usable = ((secrets ?? []) as KeySecretRow[]).filter(
+        (s) => typeof s.raw_key === "string" && s.raw_key.length > 0
+      );
+      if (usable.length > 0) {
+        const byHash: Record<string, string> = {};
+        usable.forEach((s) => { byHash[s.key_hash] = s.raw_key; });
+        setRowSecrets(byHash);
+        const live = usable[0].raw_key;
+        setSessionKey(live);
+        // Reconcile with backend truth now that we hold a live secret.
+        const { rows: synced, error } = await reconcileWithBackend(live, rows.length > 0 ? rows : keys);
+        if (error) {
+          setSyncError(`Backend sync failed: ${error}`);
+        } else {
+          persistKeys(synced);
         }
       }
     };
 
     loadData();
+
+    // Auto-open the ERP modal after a sign-in redirect (?link=1), then clean the URL.
+    if (typeof window !== "undefined" && window.location.search.includes("link=1")) {
+      setReissueKeyTarget(null);
+      setIsErpModalOpen(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
@@ -135,7 +170,7 @@ export default function KeysPage() {
     const prefix = `axis_••••${hex}`;
     const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
-    // 1. Persist metadata (hash only — never the raw secret). Surface failures loudly.
+    // 1. Persist metadata (hash only) + live secret (owner-RLS). Surface failures loudly.
     if (user) {
       const { error } = await supabase.from("api_keys").insert({
         user_id: user.id,
@@ -146,6 +181,20 @@ export default function KeysPage() {
       });
       if (error) {
         setSyncError(`Saved locally, but Supabase rejected the row: ${error.message}. Check the api_keys RLS policies.`);
+      }
+      const { error: secretError } = await supabase.from("key_secrets").insert({
+        key_hash: keyHash,
+        raw_key: key,
+        user_id: user.id,
+      });
+      if (secretError) {
+        setSyncError((prev) =>
+          prev
+            ? `${prev} Secret store also failed: ${secretError.message}. Live CRUD will need reconnect after reload.`
+            : `Key is live, but storing its secret failed: ${secretError.message}. Run the key_secrets migration. Live CRUD will need reconnect after reload.`
+        );
+      } else {
+        setRowSecrets((prev) => ({ ...prev, [keyHash]: key }));
       }
     }
 
@@ -165,7 +214,7 @@ export default function KeysPage() {
     persistKeys(synced);
   };
 
-  /** After a successful backend revoke, mirror the status into our Supabase row (matched by hash). */
+  /** After a successful backend revoke, mirror the status and drop the stored secret. */
   const handleRevokeSucceeded = async (row: ApiKeyItem) => {
     if (user && row.keyHash) {
       const { error } = await supabase
@@ -175,12 +224,20 @@ export default function KeysPage() {
       if (error) {
         setSyncError(`Backend revoked the key, but the Supabase status update failed: ${error.message}`);
       }
+      // A revoked secret is useless — don't hoard it.
+      await supabase.from("key_secrets").delete().eq("key_hash", row.keyHash);
+      setRowSecrets((prev) => {
+        const next = { ...prev };
+        delete next[row.keyHash as string];
+        return next;
+      });
     }
   };
 
   const handleAccountForgotten = async () => {
     // Best-effort Supabase cleanup — backend forget already succeeded at this point.
     if (user) {
+      await supabase.from("key_secrets").delete().eq("user_id", user.id);
       await supabase.from("api_keys").delete().eq("user_id", user.id);
     }
     persistKeys([]);
@@ -188,14 +245,24 @@ export default function KeysPage() {
     window.location.href = "/";
   };
 
-  const openReconnect = () => {
-    setReissueKeyTarget(null);
+  /** Gated open: signed in → modal; signed out → sign-in with return. */
+  const openKeyModal = async (target: ApiKeyItem | null) => {
+    const dest = await keyGenGate(supabase, "/keys");
+    if (dest) {
+      router.push(dest);
+      return;
+    }
+    setReissueKeyTarget(target);
     setIsErpModalOpen(true);
+  };
+
+  const openReconnect = () => {
+    openKeyModal(null);
   };
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Navbar onOpenErpModal={() => setIsErpModalOpen(true)} />
+      <Navbar onOpenErpModal={() => openKeyModal(null)} />
 
       <main className="flex-1 pt-24 pb-16">
         <div className="max-w-5xl mx-auto px-4 space-y-8">
@@ -206,7 +273,7 @@ export default function KeysPage() {
               <p className="text-xs text-zinc-500 mt-1 max-w-md">Create, monitor, and revoke API credentials.</p>
             </div>
             <button
-              onClick={() => setIsErpModalOpen(true)}
+              onClick={() => openKeyModal(null)}
               className="bg-white hover:bg-zinc-200 text-zinc-900 font-arial-bold text-xs px-4 py-2 rounded-lg transition-all flex items-center gap-1.5"
             >
               <Plus className="w-3.5 h-3.5" /> Create Key
@@ -232,8 +299,9 @@ export default function KeysPage() {
           <MyKeysTable
             keys={keys}
             onKeysUpdated={persistKeys}
-            onRequestReissue={(t: ApiKeyItem) => { setReissueKeyTarget(t); setIsErpModalOpen(true); }}
+            onRequestReissue={(t: ApiKeyItem) => openKeyModal(t)}
             sessionKey={sessionKey}
+            rowSecrets={rowSecrets}
             onNeedSessionKey={openReconnect}
             onRevokeSucceeded={handleRevokeSucceeded}
           />
@@ -257,6 +325,7 @@ export default function KeysPage() {
           )}
           <DangerZone
             sessionKey={sessionKey}
+            rowSecrets={rowSecrets}
             onNeedSessionKey={openReconnect}
             onAccountForgotten={handleAccountForgotten}
           />
