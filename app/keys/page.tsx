@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
@@ -11,7 +11,7 @@ import { DangerZone } from "@/components/DangerZone";
 import { ErpLinkModal } from "@/components/ErpLinkModal";
 import { KeyCreatedModal } from "@/components/KeyCreatedModal";
 import { ApiKeyItem, KeySecretRow } from "@/lib/types";
-import { listKeysFromBackend, normalizeBackendKey } from "@/lib/api";
+import { listKeysFromBackend, normalizeBackendKey, deleteKey } from "@/lib/api";
 import { keyGenGate } from "@/lib/keyGate";
 import { createClient } from "@/lib/supabase/client";
 import { Plus, User as UserIcon, RefreshCw, AlertTriangle } from "lucide-react";
@@ -40,6 +40,8 @@ export default function KeysPage() {
   /** Raw secrets restored from key_secrets, keyed by key_hash. Memory only — never persisted. */
   const [rowSecrets, setRowSecrets] = useState<Record<string, string>>({});
   const [syncError, setSyncError] = useState<string | null>(null);
+  /** Revoke confirmed while no live secret existed — auto-runs once a fresh key arrives. */
+  const pendingRevokeRef = useRef<ApiKeyItem | null>(null);
 
   const persistKeys = (rows: ApiKeyItem[]) => {
     setKeys(rows);
@@ -235,7 +237,24 @@ export default function KeysPage() {
           : `Saved, but backend sync failed: ${error}. The key itself is live — it will reconcile on next sync.`
       );
     }
-    persistKeys(synced);
+    let finalRows = synced;
+    // Auto-complete a revoke that was confirmed before the live key existed.
+    const pending = pendingRevokeRef.current;
+    pendingRevokeRef.current = null;
+    if (pending) {
+      try {
+        await deleteKey(pending.backendId ?? pending.id, key);
+        finalRows = synced.map((r) =>
+          r.id === pending.id ? { ...r, status: "revoked" as const } : r
+        );
+        await handleRevokeSucceeded(pending);
+      } catch (err: any) {
+        setSyncError(
+          `Reconnected, but revoking "${pending.name}" failed: ${err?.message || "unknown error"}. It is still active — try Revoke again.`
+        );
+      }
+    }
+    persistKeys(finalRows);
   };
 
   /** After a successful backend revoke, mirror the status and drop the stored secret. */
@@ -281,8 +300,10 @@ export default function KeysPage() {
     setIsErpModalOpen(true);
   };
 
-  const openReconnect = () => {
+  const openReconnect = (forRow?: ApiKeyItem) => {
     // Management reconnect — open on the Existing tab, no accidental key minting.
+    // If a revoke was pending, it auto-completes after the fresh key arrives.
+    pendingRevokeRef.current = forRow ?? null;
     openKeyModal(null, "login");
   };
 
@@ -344,10 +365,10 @@ export default function KeysPage() {
                     These rows have no stored secret (created before secret storage). Connect once via{" "}
                     <strong className="text-zinc-300">Existing</strong> to manage live server keys.
                   </span>
-                  <button
-                    onClick={openReconnect}
-                    className="flex items-center gap-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-zinc-200 px-3 py-1.5 rounded-lg transition-colors"
-                  >
+              <button
+                onClick={() => openReconnect()}
+                className="flex items-center gap-1.5 bg-white/[0.06] hover:bg-white/[0.1] text-zinc-200 px-3 py-1.5 rounded-lg transition-colors"
+              >
                     <RefreshCw className="w-3.5 h-3.5" /> Reconnect
                   </button>
                 </div>

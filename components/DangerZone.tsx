@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { forgetAccount } from "@/lib/api";
+import type { ApiKeyItem } from "@/lib/types";
 import { AlertTriangle, Trash2, X } from "lucide-react";
 
 interface DangerZoneProps {
@@ -12,7 +13,8 @@ interface DangerZoneProps {
   sessionKey: string | null;
   /** Stored raw secrets by key_hash (memory-only). Any one authorizes forget. */
   rowSecrets: Record<string, string>;
-  onNeedSessionKey: () => void;
+  /** Called when forget needs a live secret first. */
+  onNeedSessionKey: (forRow?: ApiKeyItem) => void;
 }
 
 export function DangerZone({ onAccountForgotten, sessionKey, rowSecrets, onNeedSessionKey }: DangerZoneProps) {

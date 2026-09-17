@@ -15,7 +15,8 @@ interface MyKeysTableProps {
   sessionKey: string | null;
   /** Stored raw secrets by key_hash (memory-only). Enables self-auth revoke per row. */
   rowSecrets: Record<string, string>;
-  onNeedSessionKey: () => void;
+  /** Called when revoke needs a live secret first — receives the pending row. */
+  onNeedSessionKey: (forRow?: ApiKeyItem) => void;
   onRevokeSucceeded?: (row: ApiKeyItem) => void;
 }
 
@@ -30,9 +31,10 @@ export function MyKeysTable({ keys, onKeysUpdated, onRequestReissue, sessionKey,
     const rowSecret =
       (revokeTarget.keyHash && rowSecrets[revokeTarget.keyHash]) || sessionKey;
     if (!rowSecret) {
-      // No live secret → cannot touch the backend. Reconnect instead of fake-revoking.
+      // No live secret → stash the pending revoke and connect. The revoke
+      // auto-completes the moment a live key arrives (see KeysPage).
       setRevokeTarget(null);
-      onNeedSessionKey();
+      onNeedSessionKey(revokeTarget);
       return;
     }
     setIsRevoking(true);
