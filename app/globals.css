@@ -100,6 +100,39 @@ body {
   background-size: 200% 200%, 200% 200%;
 }
 
+/* ─── STARFIELD (site-wide, CSS-only, ~0KB) ─── */
+@keyframes star-twinkle {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+.starfield {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 12px 22px, rgba(255, 255, 255, 0.65) 50%, transparent 52%),
+    radial-gradient(1px 1px at 68px 94px, rgba(255, 255, 255, 0.45) 50%, transparent 52%),
+    radial-gradient(1.5px 1.5px at 130px 44px, rgba(255, 255, 255, 0.6) 50%, transparent 52%),
+    radial-gradient(1px 1px at 190px 140px, rgba(255, 255, 255, 0.4) 50%, transparent 52%),
+    radial-gradient(2px 2px at 240px 70px, rgba(255, 255, 255, 0.55) 50%, transparent 52%);
+  background-size:
+    260px 180px,
+    300px 220px,
+    340px 200px,
+    280px 240px,
+    420px 300px;
+  animation: star-twinkle 14s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .starfield {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
 /* Glass */
 .glass-surface {
   background: rgba(12, 12, 14, 0.7);

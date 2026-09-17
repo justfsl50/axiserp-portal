@@ -19,6 +19,8 @@ export default function RootLayout({
       <body className="bg-[#09090b] text-zinc-100 font-arial antialiased">
         {/* Animated mesh gradient — shared across all pages */}
         <div className="animated-bg" />
+        {/* CSS-only starfield — shared across all pages, sits above aurora */}
+        <div className="starfield" aria-hidden="true" />
         <div className="relative z-10">
           {children}
         </div>
