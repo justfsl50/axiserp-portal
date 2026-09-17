@@ -10,7 +10,7 @@ interface ToolInfo {
 }
 
 const TOOLS: ToolInfo[] = [
-  { name: "profile", prompt: "Who am I registered as?", output: { account: "2023BCS084", name: "Rahul Verma", program: "B.Tech CSE", semester: 7 } },
+  { name: "profile", prompt: "Who am I registered as?", output: { account: "2023bcs084", name: "Rahul Verma", program: "B.Tech CSE", semester: 7 } },
   { name: "today", prompt: "What classes do I have today?", output: { date: "Monday", classes: [{ time: "09:00", subject: "Mini Project Lab", room: "Lab 3" }, { time: "09:50", subject: "Cloud Computing", room: "Room 204" }] } },
   { name: "attendance", prompt: "Can I skip class tomorrow?", output: { percentage: 80.95, status: "SAFE", safe_bunks: 3 } },
   { name: "timetable", prompt: "Show my weekly schedule", output: { monday: ["09:00 Mini Project", "09:50 Cloud Computing", "10:50 AI"], tuesday: ["09:00 AI", "09:50 Cloud Computing"] } },

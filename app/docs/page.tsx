@@ -43,14 +43,14 @@ npx -y axiserp`,
   get_key_signup: `curl -s -X POST https://api.handlebid.lol/v1/auth/signup \\
   -H 'Content-Type: application/json' \\
   -d '{
-    "erpId": "2023BCS084",
+    "erpId": "2023bcs084",
     "erpPassword": "YOUR_ERP_PASSWORD",
     "name": "web"
   }'
 
 # Response (key shown ONCE — copy it immediately):
 # {
-#   "account": "2023BCS084",
+#   "account": "2023bcs084",
 #   "id": 7,
 #   "key": "axis_live_9794a8c189c349124cb42d53"
 # }`,
@@ -58,7 +58,7 @@ npx -y axiserp`,
 curl -s -X POST https://api.handlebid.lol/v1/auth/login \\
   -H 'Content-Type: application/json' \\
   -d '{
-    "erpId": "2023BCS084",
+    "erpId": "2023bcs084",
     "erpPassword": "YOUR_ERP_PASSWORD",
     "name": "mcp"
   }'`,

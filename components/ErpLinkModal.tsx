@@ -38,10 +38,17 @@ export function ErpLinkModal({ isOpen, onClose, onKeyCreated, reissueTarget }: E
 
   const isReissue = Boolean(reissueTarget);
 
+  const ERP_ID_RE = /^\d{4}[a-z]+\d+$/;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!erpId.trim() || !erpPassword.trim()) {
-      setError("Please fill in your College Roll Number (ERP ID) and password.");
+    const id = erpId.trim().toLowerCase();
+    if (!id || !erpPassword.trim()) {
+      setError("Please enter your ERP ID and password.");
+      return;
+    }
+    if (!ERP_ID_RE.test(id)) {
+      setError("ERP ID looks like 2023bcs084 — year, branch code, then number. No email needed.");
       return;
     }
 
@@ -54,7 +61,7 @@ export function ErpLinkModal({ isOpen, onClose, onKeyCreated, reissueTarget }: E
       const useSignup = reissueTarget ? false : isSignup;
       const response = await loginOrSignupErp(
         {
-          erpId: erpId.trim(),
+          erpId: id,
           erpPassword: erpPassword.trim(),
           name: name.trim() || "My Laptop",
         },
@@ -71,7 +78,7 @@ export function ErpLinkModal({ isOpen, onClose, onKeyCreated, reissueTarget }: E
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
       <div className="relative w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
         <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80 mb-4">
           <div className="flex items-center gap-2">
@@ -127,11 +134,11 @@ export function ErpLinkModal({ isOpen, onClose, onKeyCreated, reissueTarget }: E
           )}
 
           <div>
-            <label className="block font-mono text-xs text-zinc-400 mb-1.5">Roll Number / ERP ID</label>
+            <label className="block font-mono text-xs text-zinc-400 mb-1.5">ERP ID</label>
             <Input
               value={erpId}
               onChange={(e) => setErpId(e.target.value)}
-              placeholder="e.g. 2024BCS042"
+              placeholder="e.g. 2023bcs084"
               required
               autoFocus
             />

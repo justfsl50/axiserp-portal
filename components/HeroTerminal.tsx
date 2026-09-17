@@ -16,7 +16,7 @@ export function HeroTerminal() {
     { label: "Weekly timetable", key: "w", screen: "timetable" as Screen, info: "Mon–Fri" },
     { label: "My marks", key: "m", screen: "marks" as Screen, info: "SGPA 8.42" },
     { label: "Inbox", key: "i", screen: "inbox" as Screen, info: "0 dues" },
-    { label: "Profile", key: "p", screen: "profile" as Screen, info: "2023BCS084" },
+    { label: "Profile", key: "p", screen: "profile" as Screen, info: "2023bcs084" },
     { label: "Logout (wipe)", key: "o", screen: "logout" as Screen, info: "" },
   ];
 
@@ -183,7 +183,7 @@ export function HeroTerminal() {
               <div className="text-white font-bold text-xs pb-2 border-b border-white/[0.04]">PROFILE</div>
               {[
                 ["Name", "Rahul Verma"],
-                ["Roll", "2023BCS084"],
+                ["Roll", "2023bcs084"],
                 ["Program", "B.Tech CSE (Sem 7)"],
                 ["Mentor", "Dr. Avinash Kumar"],
               ].map(([k, v], i) => (
