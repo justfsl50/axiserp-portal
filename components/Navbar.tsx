@@ -18,15 +18,22 @@ export function Navbar({ onOpenErpModal }: NavbarProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+    // Fast: getSession reads local storage, no network. Renders instantly.
+    supabase.auth.getSession().then(({ data }) => {
+      if (!cancelled && data?.session?.user) setUser(data.session.user);
+    });
+    // Background revalidation (network) — corrects stale sessions silently.
     supabase.auth.getUser().then(({ data }) => {
-      if (data?.user) setUser(data.user);
+      if (!cancelled && data?.user) setUser(data.user);
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      if (!cancelled) setUser(session?.user ?? null);
     });
 
     return () => {
+      cancelled = true;
       authListener?.subscription?.unsubscribe();
     };
   }, [supabase]);

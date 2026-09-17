@@ -1,28 +1,24 @@
 import { ApiKeyItem, ErpAuthPayload, ErpAuthResponse, StudentAttendance, TodaySchedule } from "./types";
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.handlebid.lol";
-
 /**
- * Shared transport layer for auth endpoints.
- * - Network errors (fetch throws) → thrown to the caller so the UI can display them.
- *   Never silently fake a key — a fake key looks real and causes confusing failures later.
- * - Server errors (non-2xx) → thrown to the caller so the UI can display them.
+ * Browser code must NEVER call the upstream API directly — that triggers
+ * CORS preflights (and fails when the backend omits ACAO headers).
+ * All requests go through same-origin Next.js proxies in app/api/...,
+ * which forward server-to-server (no CORS there).
  */
 async function callAuthEndpoint(
-  endpoint: "/v1/auth/signup" | "/v1/auth/login",
+  endpoint: "/api/auth/signup" | "/api/auth/login",
   payload: { erpId: string; erpPassword?: string; name: string }
 ): Promise<ErpAuthResponse> {
   let res: Response;
 
   try {
-    res = await fetch(`${API_BASE}${endpoint}`, {
+    res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
   } catch {
-    // Pure network failure (no internet, CORS preflight blocked, backend down).
-    // Throw so the UI shows a real error — never silently fake a key.
     throw new Error(
       `Cannot reach auth server (${endpoint}). Check your connection and try again.`
     );
@@ -33,22 +29,21 @@ async function callAuthEndpoint(
   if (res.ok) return data;
 
   // Server explicitly rejected the request (bad credentials, rate limit, etc.)
-  // Propagate so the modal can display the error — never silently fake a key.
   throw new Error(data?.message ?? `Server error ${res.status}`);
 }
 
 /**
- * 1. First key (show once) - POST /v1/auth/signup
+ * 1. First key (show once) - POST /api/auth/signup (proxied)
  */
 export function signupErp(erpId: string, erpPassword?: string, name = "web"): Promise<ErpAuthResponse> {
-  return callAuthEndpoint("/v1/auth/signup", { erpId, erpPassword, name });
+  return callAuthEndpoint("/api/auth/signup", { erpId, erpPassword, name });
 }
 
 /**
- * 2. Additional keys (one per consumer: mcp, cli, tui...) - POST /v1/auth/login
+ * 2. Additional keys (one per consumer: mcp, cli, tui...) - POST /api/auth/login (proxied)
  */
 export function loginErp(erpId: string, erpPassword?: string, name = "mcp"): Promise<ErpAuthResponse> {
-  return callAuthEndpoint("/v1/auth/login", { erpId, erpPassword, name });
+  return callAuthEndpoint("/api/auth/login", { erpId, erpPassword, name });
 }
 
 export function loginOrSignupErp(payload: ErpAuthPayload, isSignup = false): Promise<ErpAuthResponse> {
@@ -59,13 +54,13 @@ export function loginOrSignupErp(payload: ErpAuthPayload, isSignup = false): Pro
 }
 
 /**
- * 3. List keys - GET /v1/keys under X-API-Key
+ * 3. List keys - GET /api/keys (proxied) under X-API-Key
  */
 export async function fetchKeys(apiKey?: string): Promise<ApiKeyItem[]> {
   if (apiKey) {
     let res: Response;
     try {
-      res = await fetch(`${API_BASE}/v1/keys`, {
+      res = await fetch("/api/keys", {
         headers: { "X-API-Key": apiKey },
       });
     } catch {
@@ -95,13 +90,13 @@ export async function fetchKeys(apiKey?: string): Promise<ApiKeyItem[]> {
 }
 
 /**
- * 4. Revoke one - DELETE /v1/keys/{id} under X-API-Key
+ * 4. Revoke one - DELETE /api/keys/{id} (proxied) under X-API-Key
  */
 export async function deleteKey(keyId: string | number, apiKey?: string): Promise<boolean> {
   if (apiKey) {
     let res: Response;
     try {
-      res = await fetch(`${API_BASE}/v1/keys/${keyId}`, {
+      res = await fetch(`/api/keys/${keyId}`, {
         method: "DELETE",
         headers: { "X-API-Key": apiKey },
       });
@@ -119,13 +114,13 @@ export async function deleteKey(keyId: string | number, apiKey?: string): Promis
 }
 
 /**
- * 5. Forget everything - POST /v1/account/forget under X-API-Key
+ * 5. Forget everything - POST /api/account/forget (proxied) under X-API-Key
  */
 export async function forgetAccount(apiKey?: string): Promise<boolean> {
   if (apiKey) {
     let res: Response;
     try {
-      res = await fetch(`${API_BASE}/v1/account/forget`, {
+      res = await fetch("/api/account/forget", {
         method: "POST",
         headers: { "X-API-Key": apiKey },
       });
@@ -154,7 +149,7 @@ export async function fetchAttendance(apiKey?: string): Promise<StudentAttendanc
   if (!apiKey) return DEMO_ATTENDANCE; // showcase mode, clearly demo data
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}/v1/attendance`, {
+    res = await fetch("/api/attendance", {
       headers: { "X-API-Key": apiKey },
     });
   } catch {
@@ -183,7 +178,7 @@ export async function fetchTodaySchedule(apiKey?: string): Promise<TodaySchedule
   if (!apiKey) return DEMO_SCHEDULE; // showcase mode, clearly demo data
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}/v1/today`, {
+    res = await fetch("/api/today", {
       headers: { "X-API-Key": apiKey },
     });
   } catch {

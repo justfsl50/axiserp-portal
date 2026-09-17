@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { Navbar } from "@/components/Navbar";
 import { HeroTerminal } from "@/components/HeroTerminal";
 import { McpShowcase } from "@/components/McpShowcase";
@@ -32,12 +33,15 @@ export default function HomePage() {
       <main className="flex-1">
         {/* ─── HERO ─── */}
         <section className="relative w-full min-h-[100vh] flex flex-col items-center justify-center overflow-hidden">
-          {/* Campus bg */}
+          {/* Campus bg — next/image optimizes the 2.4MB PNG (was plain <img>) */}
           <div className="absolute inset-0 z-0">
-            <img
+            <Image
               src={heroImageSrc}
               alt="Axis Colleges Campus — pixel art skyline"
-              className="w-full h-full object-cover object-center"
+              fill
+              priority
+              sizes="100vw"
+              className="object-cover object-center"
               onError={() => setHeroImageSrc(HERO_IMAGE_FALLBACK)}
             />
             <div className="absolute inset-0 bg-gradient-to-b from-[#09090b]/80 via-[#09090b]/40 to-[#09090b]" />

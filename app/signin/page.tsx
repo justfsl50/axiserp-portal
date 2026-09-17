@@ -19,8 +19,8 @@ export default function SignInPage() {
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }: any) => {
-      if (data?.user) router.push("/keys");
+    supabase.auth.getSession().then(({ data }: any) => {
+      if (data?.session?.user) router.push("/keys");
     });
   }, [router, supabase]);
 

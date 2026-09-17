@@ -48,30 +48,37 @@ export default function KeysPage() {
     };
 
     const loadData = async () => {
+      // 1. Paint instantly from local cache — no network wait.
+      loadLocalKeys();
+      // 2. Fast session read first, then validate in background.
+      const { data: { session } } = await supabase.auth.getSession();
+      const sessionUser = session?.user ?? null;
+      if (sessionUser) setUser(sessionUser);
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUser(user);
-        // Fetch keys from Supabase
+      const effectiveUser = user ?? sessionUser;
+      if (effectiveUser) {
+        if (user) setUser(user);
+        // Fetch keys from Supabase (capped — table can grow large)
         const { data: dbKeys } = await supabase
           .from("api_keys")
-          .select("*")
-          .order("created_at", { ascending: false });
+          .select("id,name,key_prefix,created_at,status")
+          .order("created_at", { ascending: false })
+          .limit(50);
 
         if (dbKeys && dbKeys.length > 0) {
-          setKeys(dbKeys.map((k: any) => ({
+          const mapped = dbKeys.map((k: any) => ({
             id: k.id.toString(),
             name: k.name,
             prefix: k.key_prefix,
             created_at: new Date(k.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
             status: k.status,
             lastChars: k.key_prefix.slice(-2),
-          })));
-        } else {
-          // Fallback to localStorage
-          loadLocalKeys();
+          }));
+          setKeys(mapped);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("axiserp_keys_metadata", JSON.stringify(mapped));
+          }
         }
-      } else {
-        loadLocalKeys();
       }
     };
 

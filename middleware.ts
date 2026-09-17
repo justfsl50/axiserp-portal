@@ -23,12 +23,16 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session if expired
-  await supabase.auth.getUser();
+  // Fast path: getSession reads cookies only (no network round-trip).
+  // getUser() validates over the network and adds ~100-500ms to EVERY
+  // navigation under matcher — that was the main nav slowness.
+  await supabase.auth.getSession();
 
   return response;
 }
 
 export const config = {
-  matcher: ["/keys", "/connect", "/signin", "/auth/:path*"],
+  // Only refresh where session cookies actually matter.
+  // Marketing pages (/, /docs) skip middleware entirely → instant nav.
+  matcher: ["/keys", "/auth/:path*"],
 };
