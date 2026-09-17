@@ -1,6 +1,6 @@
-# AXISERP Portal
+# AXISMCP Portal
 
-Self-service developer portal for AXISERP — read-only College ERP API for MCP, CLI/TUI, and REST.
+Self-service developer portal for AXISMCP — read-only College ERP API for MCP, CLI/TUI, and REST.
 
 ## Stack
 

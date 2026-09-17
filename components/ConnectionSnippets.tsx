@@ -97,7 +97,7 @@ export function ConnectionSnippets({ apiKey = "YOUR_API_KEY" }: ConnectionSnippe
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h4 className="text-sm font-semibold text-white">Connect your AI Assistant</h4>
-                <p className="text-xs text-zinc-400">Add AXISERP to Claude Desktop, Cursor, or Zed with this configuration.</p>
+                <p className="text-xs text-zinc-400">Add AXISMCP to Claude Desktop, Cursor, or Zed with this configuration.</p>
               </div>
               <div className="flex bg-zinc-900 border border-zinc-800 rounded-md p-0.5 text-xs font-mono">
                 <button
@@ -187,7 +187,7 @@ export function ConnectionSnippets({ apiKey = "YOUR_API_KEY" }: ConnectionSnippe
 
             {/* ASCII TUI Preview matching Screenshot 1 */}
             <div className="mt-4 rounded-lg border border-zinc-800 bg-black p-4 font-mono text-xs text-zinc-400 overflow-x-auto leading-relaxed">
-              <div className="text-center text-[#c9a0ff] font-bold">AXISERP v1.1.2</div>
+              <div className="text-center text-[#c9a0ff] font-bold">AXISMCP v1.1.2</div>
               <div className="text-center text-zinc-500 text-[12px] mb-3">────── CAMPUS SYSTEMS SIMPLIFIED ──────</div>
               <div className="space-y-0.5 text-zinc-300">
                 <div className="text-[#39ff14] font-semibold">&gt; My attendance  <span className="text-[#00f0ff]">(s)</span></div>

@@ -40,13 +40,13 @@ export function DangerZone({ onAccountForgotten }: DangerZoneProps) {
     <div className="rounded-xl border border-red-500/20 bg-red-500/[0.02] p-6">
       <div className="flex items-center gap-2 text-red-400 font-mono text-xs font-bold uppercase tracking-wider mb-2">
         <span className="bg-red-500/20 px-2 py-0.5 rounded border border-red-500/30">DANGER ZONE</span>
-        <span>FORGET AXISERP ACCOUNT</span>
+        <span>FORGET AXISMCP ACCOUNT</span>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-4 mt-3">
         <div className="max-w-xl text-xs text-zinc-400 leading-relaxed">
           <p>
-            Remove your AXISERP connection and associated credentials. All generated API keys will be immediately purged and deactivated across connected MCP, CLI, and REST tools.
+            Remove your AXISMCP connection and associated credentials. All generated API keys will be immediately purged and deactivated across connected MCP, CLI, and REST tools.
           </p>
           <p className="text-red-400/90 font-medium mt-1">⚠️ This action cannot be undone.</p>
         </div>
@@ -72,7 +72,7 @@ export function DangerZone({ onAccountForgotten }: DangerZoneProps) {
             </div>
 
             <p className="text-xs text-zinc-300 leading-relaxed mb-4">
-              This will permanently purge your AXISERP session and invalidate all active API keys.
+              This will permanently purge your AXISMCP session and invalidate all active API keys.
             </p>
 
             {forgetError && (

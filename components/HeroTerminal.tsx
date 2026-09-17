@@ -60,8 +60,8 @@ export function HeroTerminal() {
         <div>
           {/* Logo */}
           <div className="text-center mb-5 select-none">
-            <div className="text-zinc-500 text-xs font-bold tracking-widest mb-0.5">AXISERP</div>
-            <div className="text-zinc-600 text-[12px]">v1.1.2 · Read-only ERP scraper</div>
+            <div className="text-zinc-500 text-xs font-bold tracking-widest mb-0.5">AXISMCP</div>
+            <div className="text-zinc-600 text-[12px]">v1.1.2 · Secure ERP connector</div>
           </div>
 
           {/* Menu */}

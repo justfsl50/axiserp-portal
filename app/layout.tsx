@@ -5,7 +5,7 @@ import { GeistPixelGrid } from "geist/font/pixel";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AXISERP — Developer API for College ERP",
+  title: "AXISMCP — Developer API for College ERP",
   description: "Self-service API portal connecting your college ERP to Claude, Cursor, terminal, and custom apps.",
 };
 

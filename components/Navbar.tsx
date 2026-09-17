@@ -55,7 +55,7 @@ export function Navbar({ onOpenErpModal }: NavbarProps) {
     <header className="fixed top-4 left-0 right-0 z-50 px-4 max-w-5xl mx-auto w-full">
       <nav className="bg-[#09090b]/60 backdrop-blur-2xl rounded-full px-4 sm:px-6 py-2.5 flex items-center justify-between border border-white/[0.06]">
         <Link href="/" className="flex items-center gap-2">
-          <span className="font-uber text-sm tracking-tight text-white">AXIS<span className="text-zinc-500">ERP</span></span>
+          <span className="font-uber text-sm tracking-tight text-white">AXIS<span className="text-zinc-500">MCP</span></span>
         </Link>
 
         <div className="hidden md:flex items-center gap-0.5 bg-white/[0.03] rounded-full p-1">
