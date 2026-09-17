@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-sans-uber: var(--font-geist-pixel-grid), "Geist Mono", ui-monospace, monospace;
+    --font-arial: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --background: 0 0% 3%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 5%;
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 5%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 4%;
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 55%;
+    --accent: 0 0% 14%;
+    --accent-foreground: 0 0% 96%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 12%;
+    --input: 0 0% 12%;
+    --ring: 0 0% 100%;
+    --radius: 0.75rem;
+  }
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #09090b;
+  color: #fafafa;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  font-family: var(--font-arial);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography */
+.font-uber {
+  font-family: var(--font-sans-uber);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.06;
+}
+
+.font-uber-heavy {
+  font-family: var(--font-sans-uber);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.02;
+}
+
+.font-arial-bold {
+  font-family: var(--font-arial);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.font-arial {
+  font-family: var(--font-arial);
+}
+
+/* ─── ANIMATED MESH GRADIENT BACKGROUND ─── */
+@keyframes aurora {
+  0%, 100% {
+    background-position: 0% 50%, 100% 50%;
+  }
+  25% {
+    background-position: 100% 0%, 0% 100%;
+  }
+  50% {
+    background-position: 100% 100%, 0% 0%;
+  }
+  75% {
+    background-position: 0% 100%, 100% 0%;
+  }
+}
+
+.animated-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(120, 119, 198, 0.12) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 80% at 80% 80%, rgba(255, 99, 71, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse 70% 50% at 60% 20%, rgba(56, 189, 248, 0.08) 0%, transparent 50%);
+  animation: aurora 25s ease-in-out infinite;
+  background-size: 200% 200%, 200% 200%;
+}
+
+/* Glass */
+.glass-surface {
+  background: rgba(12, 12, 14, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-pill {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); }
+
+::selection {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
