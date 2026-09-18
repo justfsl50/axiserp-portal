@@ -26,9 +26,13 @@ export function Footer() {
         </div>
         <div className="flex items-center gap-4">
           <Link href="/keys" className="hover:text-white transition-colors">Keys</Link>
-          <Link href="/connect" className="hover:text-white transition-colors">Connect</Link>
           <Link href="/docs" className="hover:text-white transition-colors">Docs</Link>
+          <Link href="/terms" className="hover:text-white transition-colors">Terms</Link>
+          <Link href="/privacy" className="hover:text-white transition-colors">Privacy</Link>
         </div>
+      </div>
+      <div className="max-w-5xl mx-auto px-4 mt-4 text-[11px] text-zinc-700">
+        Not affiliated with or endorsed by your college. Read-only access, used only for your own account.
       </div>
     </footer>
   );

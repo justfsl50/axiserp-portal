@@ -29,7 +29,7 @@ export default function SignInPage() {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }: any) => {
+    supabase.auth.getSession().then(({ data }) => {
       if (data?.session?.user) router.push(getReturnTarget());
     });
   }, [router, supabase]);
@@ -45,8 +45,9 @@ export default function SignInPage() {
         options: { redirectTo: redirectUrl },
       });
       if (error) throw error;
-    } catch (err: any) {
-      setErrorMsg(err.message || `${provider} login failed`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : `${provider} login failed`;
+      setErrorMsg(msg);
     } finally {
       setIsLoading(false);
     }
@@ -67,8 +68,9 @@ export default function SignInPage() {
       if (error) throw error;
       setIsOtpSent(true);
       setSuccessMsg(`Magic link sent to ${email}. Check your inbox.`);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Failed to send magic link");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to send magic link";
+      setErrorMsg(msg);
     } finally {
       setIsLoading(false);
     }
@@ -87,8 +89,9 @@ export default function SignInPage() {
       });
       if (error) throw error;
       router.push(getReturnTarget());
-    } catch (err: any) {
-      setErrorMsg(err.message || "Invalid or expired code");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Invalid or expired code";
+      setErrorMsg(msg);
     } finally {
       setIsLoading(false);
     }

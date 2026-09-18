@@ -1,23 +1,39 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { clientIp, isSameOrigin, rateLimit, readApiKey } from "@/lib/security";
+import { noStoreJson, upstreamError, upstreamFetch } from "@/lib/upstream";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.handlebid.lol";
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
+/**
+ * POST /api/account/forget — irreversible: invalidates every live key.
+ * Same-origin only, throttled, and requires a well-formed key.
+ */
 export async function POST(req: NextRequest) {
-  const apiKey = req.headers.get("X-API-Key") ?? req.headers.get("x-api-key") ?? "";
-  if (!apiKey) {
-    return NextResponse.json({ message: "Missing X-API-Key" }, { status: 401 });
+  if (!isSameOrigin(req)) {
+    return noStoreJson({ message: "Cross-site requests are not allowed." }, 403);
   }
+
+  const apiKey = readApiKey(req);
+  if (!apiKey) {
+    return noStoreJson({ message: "Missing or malformed X-API-Key" }, 401);
+  }
+
+  const limit = await rateLimit(`forget:${clientIp(req)}`, 5, 300);
+  if (!limit.ok) {
+    return noStoreJson({ message: "Too many requests. Slow down." }, 429, {
+      "Retry-After": String(limit.retryAfter || 300),
+    });
+  }
+
   try {
-    const res = await fetch(`${API_BASE}/v1/account/forget`, {
+    const res = await upstreamFetch("/v1/account/forget", {
       method: "POST",
       headers: { "X-API-Key": apiKey },
     });
     const data = await res.json().catch(() => ({}));
-    return NextResponse.json(data, { status: res.status });
-  } catch (err: any) {
-    return NextResponse.json(
-      { message: err?.message || "Upstream API unreachable" },
-      { status: 502 }
-    );
+    return noStoreJson(data, res.status);
+  } catch (err) {
+    return upstreamError(err);
   }
 }

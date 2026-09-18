@@ -2,11 +2,16 @@
   "name": "axiserp-portal",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=18.17.0"
+  },
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm run lint && npm run build"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -17,6 +22,7 @@
     "next": "14.2.23",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sharp": "^0.35.4",
     "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {

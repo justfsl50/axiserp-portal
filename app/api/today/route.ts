@@ -1,26 +1,31 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { clientIp, rateLimit, readApiKey } from "@/lib/security";
+import { noStoreJson, upstreamError, upstreamFetch } from "@/lib/upstream";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-const API_BASE =
-  process.env.API_BASE || process.env.NEXT_PUBLIC_API_BASE || "https://api.handlebid.lol";
-
+/** GET /api/today — the caller's own schedule (auth: X-API-Key). */
 export async function GET(req: NextRequest) {
-  const apiKey = req.headers.get("X-API-Key") ?? req.headers.get("x-api-key") ?? "";
+  const apiKey = readApiKey(req);
   if (!apiKey) {
-    return NextResponse.json({ message: "Missing X-API-Key" }, { status: 401 });
+    return noStoreJson({ message: "Missing or malformed X-API-Key" }, 401);
   }
+
+  const limit = await rateLimit(`data:${clientIp(req)}`, 120, 60);
+  if (!limit.ok) {
+    return noStoreJson({ message: "Too many requests. Slow down." }, 429, {
+      "Retry-After": String(limit.retryAfter || 60),
+    });
+  }
+
   try {
-    const res = await fetch(`${API_BASE}/v1/today`, {
+    const res = await upstreamFetch("/v1/today", {
       headers: { "X-API-Key": apiKey },
-      cache: "no-store",
     });
     const data = await res.json().catch(() => null);
-    return NextResponse.json(data ?? {}, { status: res.status });
-  } catch (err: any) {
-    return NextResponse.json(
-      { message: err?.message || "Upstream API unreachable" },
-      { status: 502 }
-    );
+    return noStoreJson(data ?? {}, res.status);
+  } catch (err) {
+    return upstreamError(err);
   }
 }

@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import { LogOut, Key, Plug, ChevronDown } from "lucide-react";
+import { LogOut, Key, Settings, ChevronDown } from "lucide-react";
 
 interface NavbarProps {
   onOpenErpModal?: () => void;
@@ -16,6 +16,25 @@ export function Navbar({ onOpenErpModal }: NavbarProps) {
   const supabase = useMemo(() => createClient(), []);
   const [user, setUser] = useState<User | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isDropdownOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsDropdownOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isDropdownOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +66,6 @@ export function Navbar({ onOpenErpModal }: NavbarProps) {
   const navLinks = [
     { href: "/", label: "Overview" },
     { href: "/keys", label: "My Keys" },
-    { href: "/connect", label: "Connect" },
     { href: "/docs", label: "Docs" },
   ];
 
@@ -76,9 +94,10 @@ export function Navbar({ onOpenErpModal }: NavbarProps) {
 
         <div className="flex items-center gap-2.5">
           {user ? (
-            <div className="relative">
+            <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                onBlur={() => setIsDropdownOpen(false)}
                 className="flex items-center gap-2 bg-white/[0.04] hover:bg-white/[0.08] rounded-full py-1.5 px-3 text-xs text-zinc-300 transition-colors"
               >
                 <div className="w-5 h-5 rounded-full bg-white/10 text-white font-bold flex items-center justify-center text-[12px]">
@@ -93,13 +112,13 @@ export function Navbar({ onOpenErpModal }: NavbarProps) {
                     <p className="font-medium text-white truncate">{user.user_metadata?.full_name || "Student"}</p>
                     <p className="text-zinc-500 truncate text-[13px] font-mono">{user.email}</p>
                   </div>
-                  <Link href="/keys" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-3 py-2 text-zinc-400 hover:text-white hover:bg-white/[0.04] rounded-lg transition-colors">
+                  <Link href="/keys" onMouseDown={(e) => e.preventDefault()} onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-3 py-2 text-zinc-400 hover:text-white hover:bg-white/[0.04] rounded-lg transition-colors">
                     <Key className="w-3.5 h-3.5" /> My Keys
                   </Link>
-                  <Link href="/connect" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-3 py-2 text-zinc-400 hover:text-white hover:bg-white/[0.04] rounded-lg transition-colors">
-                    <Plug className="w-3.5 h-3.5" /> Connect
+                  <Link href="/settings" onMouseDown={(e) => e.preventDefault()} onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-2 px-3 py-2 text-zinc-400 hover:text-white hover:bg-white/[0.04] rounded-lg transition-colors">
+                    <Settings className="w-3.5 h-3.5" /> Settings
                   </Link>
-                  <button onClick={handleSignOut} className="w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-red-500/10 rounded-lg mt-1 border-t border-white/[0.04] transition-colors">
+                  <button onMouseDown={(e) => e.preventDefault()} onClick={handleSignOut} className="w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-red-500/10 rounded-lg mt-1 border-t border-white/[0.04] transition-colors">
                     <LogOut className="w-3.5 h-3.5" /> Sign Out
                   </button>
                 </div>

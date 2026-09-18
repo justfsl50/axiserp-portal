@@ -4,9 +4,33 @@ import { GeistMono } from "geist/font/mono";
 import { GeistPixelGrid } from "geist/font/pixel";
 import "./globals.css";
 
+const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
+
 export const metadata: Metadata = {
-  title: "AXISMCP — Developer API for College ERP",
-  description: "Self-service API portal connecting your college ERP to Claude, Cursor, terminal, and custom apps.",
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "AXISMCP — Developer API for College ERP",
+    template: "%s — AXISMCP",
+  },
+  description:
+    "Self-service API portal connecting your college ERP to Claude, Cursor, terminal, and custom apps.",
+  applicationName: "AXISMCP",
+  robots: { index: true, follow: true },
+  openGraph: {
+    type: "website",
+    url: siteUrl,
+    siteName: "AXISMCP",
+    title: "AXISMCP — Developer API for College ERP",
+    description:
+      "Self-service API portal connecting your college ERP to Claude, Cursor, terminal, and custom apps.",
+  },
+  twitter: {
+    card: "summary",
+    title: "AXISMCP — Developer API for College ERP",
+    description:
+      "Self-service API portal connecting your college ERP to Claude, Cursor, terminal, and custom apps.",
+  },
+  icons: { icon: "/icon.svg" },
 };
 
 export default function RootLayout({

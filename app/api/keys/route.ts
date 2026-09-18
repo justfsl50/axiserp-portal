@@ -1,26 +1,33 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { clientIp, rateLimit, readApiKey } from "@/lib/security";
+import { noStoreJson, upstreamError, upstreamFetch } from "@/lib/upstream";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://api.handlebid.lol";
+// Never cache: the response is derived from a caller-supplied secret.
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-function passthroughKey(req: NextRequest) {
-  return req.headers.get("X-API-Key") ?? req.headers.get("x-api-key") ?? "";
-}
-
+/** GET /api/keys — list the caller's own keys (auth: X-API-Key). */
 export async function GET(req: NextRequest) {
-  const apiKey = passthroughKey(req);
+  const apiKey = readApiKey(req);
   if (!apiKey) {
-    return NextResponse.json({ message: "Missing X-API-Key" }, { status: 401 });
+    return noStoreJson({ message: "Missing or malformed X-API-Key" }, 401);
   }
+
+  // Throttle per IP+key so the proxy cannot be used as a key-guessing oracle.
+  const limit = await rateLimit(`keys:${clientIp(req)}`, 60, 60);
+  if (!limit.ok) {
+    return noStoreJson({ message: "Too many requests. Slow down." }, 429, {
+      "Retry-After": String(limit.retryAfter || 60),
+    });
+  }
+
   try {
-    const res = await fetch(`${API_BASE}/v1/keys`, {
+    const res = await upstreamFetch("/v1/keys", {
       headers: { "X-API-Key": apiKey },
     });
     const data = await res.json().catch(() => null);
-    return NextResponse.json(data ?? {}, { status: res.status });
-  } catch (err: any) {
-    return NextResponse.json(
-      { message: err?.message || "Upstream API unreachable" },
-      { status: 502 }
-    );
+    return noStoreJson(data ?? {}, res.status);
+  } catch (err) {
+    return upstreamError(err);
   }
 }

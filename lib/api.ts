@@ -93,7 +93,28 @@ export async function fetchKeys(apiKey?: string): Promise<ApiKeyItem[]> {  if (a
  * Requires a live raw session key — call only when one is held in memory.
  * Accepts both `[...]` and `{ keys: [...] }` response shapes.
  */
-export async function listKeysFromBackend(apiKey: string): Promise<any[]> {
+/** Raw key record as returned by the backend (vault.list_keys). */
+export interface BackendKeyRecord {
+  id: number | string;
+  name?: string;
+  scopes?: string[];
+  created_at?: number | string | null;
+  createdAt?: number | string | null;
+  last_used_at?: number | string | null;
+  revoked?: boolean;
+  key_preview?: string | null;
+}
+
+function isBackendKeyArray(value: unknown): value is BackendKeyRecord[] {
+  return Array.isArray(value);
+}
+
+/**
+ * Backend truth: list raw key records from api.handlebid.lol (via proxy).
+ * Requires a live raw key — call only when one is held.
+ * Accepts both `[...]` and `{ keys: [...] }` response shapes.
+ */
+export async function listKeysFromBackend(apiKey: string): Promise<BackendKeyRecord[]> {
   let res: Response;
   try {
     res = await fetch("/api/keys", {
@@ -106,19 +127,21 @@ export async function listKeysFromBackend(apiKey: string): Promise<any[]> {
     const data = await res.json().catch(() => null);
     throw new Error(data?.message ?? `Failed to list keys (HTTP ${res.status})`);
   }
-  const data = await res.json();
-  if (Array.isArray(data)) return data;
-  if (data.keys && Array.isArray(data.keys)) return data.keys;
+  const data: unknown = await res.json();
+  if (isBackendKeyArray(data)) return data;
+  if (data && typeof data === "object" && Array.isArray((data as { keys?: unknown }).keys)) {
+    return (data as { keys: BackendKeyRecord[] }).keys;
+  }
   return [];
 }
 
-function formatBackendDate(value: any): string {
+function formatBackendDate(value: unknown): string {
   // Backend sends epoch SECONDS (float). Date() needs ms — heuristic scale-up.
   const fmt = (d: Date) =>
     d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   try {
     if (value === null || value === undefined || value === "") throw new Error("empty");
-    const num = typeof value === "number" ? value : Date.parse(value);
+    const num = typeof value === "number" ? value : Date.parse(String(value));
     if (Number.isNaN(num)) throw new Error("unparseable");
     const ms = num < 1e12 ? num * 1000 : num;
     return fmt(new Date(ms));
@@ -132,12 +155,12 @@ function formatBackendDate(value: any): string {
  * { id, name, scopes, created_at (epoch s), last_used_at, revoked: bool, key_preview: null }
  * — there is NO status string and NO key preview, so we map honestly instead of fabricating.
  */
-export function normalizeBackendKey(record: any): ApiKeyItem {
+export function normalizeBackendKey(record: BackendKeyRecord): ApiKeyItem {
   const isRevoked = record.revoked === true;
   return {
     id: `backend_${record.id}`,
     name: record.name ?? "unnamed",
-    prefix: `backend #${record.id}`,
+    prefix: "axis_••••••••",
     created_at: formatBackendDate(record.created_at ?? record.createdAt),
     status: isRevoked ? "revoked" : "active",
     lastChars: undefined,
@@ -174,10 +197,11 @@ export async function revokeAndVerify(
   let rows: ApiKeyItem[];
   try {
     rows = (await listKeysFromBackend(secret)).map(normalizeBackendKey);
-  } catch (err: any) {
-    if (selfAuth && /401/.test(err?.message ?? "")) return; // actor dead → target (itself) dead. Verified.
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "";
+    if (selfAuth && /401/.test(message)) return; // actor dead → target (itself) dead. Verified.
     throw new Error(
-      `Revoke sent, but verification failed: ${err?.message || "unknown error"}. Target state unknown — re-sync before trusting the table.`
+      `Revoke sent, but verification failed: ${message || "unknown error"}. Target state unknown — re-sync before trusting the table.`
     );
   }
   const found = rows.find((r) => r.backendId === backendId);
