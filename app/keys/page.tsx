@@ -45,9 +45,9 @@ export default function KeysPage() {
     }
   };
 
-  /** Merge local rows with backend truth: attach real backend IDs + statuses, add backend-only rows.
-   *  Backend rows carry no key preview, so local rows link by name (first unmatched wins);
-   *  leftovers are appended as backend #id rows. */
+  /** Merge current user's Supabase rows with backend truth.
+   *  Supabase is the ownership source, so backend-only rows are never added to
+   *  the UI. Backend data only refreshes status/IDs for rows already owned here. */
   const reconcileWithBackend = async (
     rawKey: string,
     base: ApiKeyItem[]
@@ -55,8 +55,7 @@ export default function KeysPage() {
     try {
       const normalized = (await listKeysFromBackend(rawKey)).map(normalizeBackendKey);
       const taken = new Set<string>();
-      const merged = base.map((row) => {
-        if (row.backendId) return row;
+      const merged = base.flatMap((row) => {
         // Match by backendId first (if local row already has one), then by keyHash,
         // then by name as last resort. This prevents duplicate-name collisions.
         const match = normalized.find((b) => {
@@ -67,13 +66,13 @@ export default function KeysPage() {
         });
         if (match) {
           taken.add(match.backendId as string);
-          return { ...row, backendId: match.backendId, status: match.status, created_at: match.created_at };
+          return [{ ...row, backendId: match.backendId, status: match.status, created_at: match.created_at }];
         }
-        return row;
+        // Backend listing succeeded, so an unmatched cached/local row is stale
+        // and must not remain visible as an active key.
+        return [];
       });
-      const known = new Set(merged.map((r) => r.backendId).filter(Boolean));
-      const backendOnly = normalized.filter((b) => !known.has(b.backendId));
-      return { rows: [...backendOnly, ...merged], error: null };
+      return { rows: merged, error: null };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Backend sync failed.";
       return { rows: base, error: message };
@@ -213,10 +212,20 @@ export default function KeysPage() {
     const prefix = `axis_••••${hex}`;
     const today = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
-    // 1. Persist metadata (hash only) + live secret (owner-RLS). Surface failures loudly.
-    if (user) {
+    // 1. Persist metadata (hash only) + live secret (owner-RLS). Re-read the
+    // authenticated user here instead of relying only on the page state, which
+    // can still be null while the key-generation modal has already authenticated.
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    const currentUser = authData.user ?? user;
+    if (!currentUser) {
+      setSyncError(
+        authError?.message
+          ? `Key was generated, but the signed-in user could not be confirmed: ${authError.message}`
+          : "Key was generated, but the signed-in user could not be confirmed. Please refresh and try again."
+      );
+    } else {
       const { error } = await supabase.from("api_keys").insert({
-        user_id: user.id,
+        user_id: currentUser.id,
         name,
         key_prefix: prefix,
         key_hash: keyHash,
@@ -229,7 +238,7 @@ export default function KeysPage() {
       const { error: secretError } = await supabase.from("key_secrets").insert({
         key_hash: keyHash,
         raw_key: key,
-        user_id: user.id,
+        user_id: currentUser.id,
       });
       if (secretError) {
         setSyncError((prev) =>
