@@ -171,7 +171,7 @@ export default function KeysPage() {
       // Reconcile statuses with backend truth. Any stored key authenticates the read.
       const syncKey = Object.values(loaded)[0];
       if (syncKey) {
-        const base = rows.length > 0 ? rows : keys;
+        const base = rows;
         const { rows: synced, error } = await reconcileWithBackend(syncKey, base);
         if (error) {
           setSyncError(`Backend sync failed: ${error}`);

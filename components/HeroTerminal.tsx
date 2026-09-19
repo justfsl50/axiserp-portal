@@ -5,20 +5,20 @@ import { Copy, Check, CornerDownLeft } from "lucide-react";
 
 type Screen = "menu" | "attendance" | "today" | "timetable" | "marks" | "inbox" | "profile" | "logout";
 
+const menu = [
+  { label: "My attendance", key: "s", screen: "attendance" as Screen, info: "80.9%" },
+  { label: "Today's classes", key: "t", screen: "today" as Screen, info: "5 sessions" },
+  { label: "Weekly timetable", key: "w", screen: "timetable" as Screen, info: "Mon–Fri" },
+  { label: "My marks", key: "m", screen: "marks" as Screen, info: "SGPA 8.42" },
+  { label: "Inbox", key: "i", screen: "inbox" as Screen, info: "0 dues" },
+  { label: "Profile", key: "p", screen: "profile" as Screen, info: "2023bcs084" },
+  { label: "Logout (wipe)", key: "o", screen: "logout" as Screen, info: "" },
+];
+
 export function HeroTerminal() {
   const [screen, setScreen] = useState<Screen>("menu");
   const [sel, setSel] = useState(0);
   const [copied, setCopied] = useState<string | null>(null);
-
-  const menu = [
-    { label: "My attendance", key: "s", screen: "attendance" as Screen, info: "80.9%" },
-    { label: "Today's classes", key: "t", screen: "today" as Screen, info: "5 sessions" },
-    { label: "Weekly timetable", key: "w", screen: "timetable" as Screen, info: "Mon–Fri" },
-    { label: "My marks", key: "m", screen: "marks" as Screen, info: "SGPA 8.42" },
-    { label: "Inbox", key: "i", screen: "inbox" as Screen, info: "0 dues" },
-    { label: "Profile", key: "p", screen: "profile" as Screen, info: "2023bcs084" },
-    { label: "Logout (wipe)", key: "o", screen: "logout" as Screen, info: "" },
-  ];
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

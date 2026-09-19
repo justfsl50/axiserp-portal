@@ -65,6 +65,9 @@ export default function SettingsPage() {
           <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 flex items-center gap-3 text-xs">
             <div className="w-9 h-9 rounded-full bg-white/[0.06] text-white font-bold flex items-center justify-center text-sm">
               {user?.user_metadata?.avatar_url ? (
+                // Avatar URLs are user-provided and may come from any host; keep the
+                // native image element rather than restricting or proxying providers.
+                // eslint-disable-next-line @next/next/no-img-element
                 <img src={user.user_metadata.avatar_url} alt="" className="w-9 h-9 rounded-full" />
               ) : user?.email?.[0]?.toUpperCase() || <UserIcon className="w-4 h-4 text-zinc-500" />}
             </div>
