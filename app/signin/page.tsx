@@ -28,6 +28,14 @@ export default function SignInPage() {
     return params.get("link") ? `${next}${next.includes("?") ? "&" : "?"}link=1` : next;
   };
 
+  /** Supabase must return through our callback so the OAuth code becomes a session. */
+  const getAuthCallbackUrl = (): string | undefined => {
+    if (typeof window === "undefined") return undefined;
+    const callback = new URL("/auth/callback", window.location.origin);
+    callback.searchParams.set("next", getReturnTarget());
+    return callback.toString();
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (data?.session?.user) router.push(getReturnTarget());
@@ -38,11 +46,9 @@ export default function SignInPage() {
     try {
       setIsLoading(true);
       setErrorMsg("");
-      const redirectUrl =
-        typeof window !== "undefined" ? `${window.location.origin}${getReturnTarget()}` : undefined;
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
-        options: { redirectTo: redirectUrl },
+        options: { redirectTo: getAuthCallbackUrl() },
       });
       if (error) throw error;
     } catch (err: unknown) {
@@ -62,7 +68,7 @@ export default function SignInPage() {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: typeof window !== "undefined" ? `${window.location.origin}${getReturnTarget()}` : undefined,
+          emailRedirectTo: getAuthCallbackUrl(),
         },
       });
       if (error) throw error;
